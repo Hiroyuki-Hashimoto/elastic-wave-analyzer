@@ -5,6 +5,7 @@ import type { AnalysisResult } from "../types";
  * Phase 2 will add full-result CSV download and PNG chart export.
  */
 
+/** Input bundle for the all-results CSV exporter (Phase 2). */
 export type ExportInput = {
   results: AnalysisResult[];
 };

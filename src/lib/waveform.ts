@@ -20,23 +20,15 @@ export const CSV_PARSE_ERRORS = {
 export type CsvParseError = (typeof CSV_PARSE_ERRORS)[keyof typeof CSV_PARSE_ERRORS];
 
 /**
- * Parse a CSV file contents string into a RawWaveform.
- * Throws one of CSV_PARSE_ERRORS strings on validation failure.
- *
- * Rules:
- * - First line is a header that must match EXPECTED_HEADER (after trim).
- * - Trailing commas on any line are tolerated.
- * - Empty lines are ignored.
- * - Only the first three columns of data rows are used.
- * - The first three numeric values of each data row must be finite.
- * - At least two data points are required.
- * - Time column must be strictly increasing.
- * - Time is converted from seconds to microseconds (×1_000_000).
- *   Transmitter and Receiver are already in volts.
+ * Parse a CSV text into a validated RawWaveform.
+ * Throws one of CSV_PARSE_ERRORS on validation failure; callers are
+ * expected to catch and surface the message as an English error.
  */
 export function parseCsv(text: string, fileName: string): RawWaveform {
+  // Split on any line ending (CRLF / CR / LF) for cross-platform input.
   const lines = text.split(/\r\n|\r|\n/);
 
+  // The header is the first non-empty line; blank leading lines are tolerated.
   const headerIndex = lines.findIndex((line) => line.trim().length > 0);
   if (headerIndex === -1) {
     throw new Error(CSV_PARSE_ERRORS.header);
@@ -46,6 +38,7 @@ export function parseCsv(text: string, fileName: string): RawWaveform {
     .split(",")
     .map((cell) => cell.trim());
 
+  // Header must contain at least the three expected columns in order.
   if (
     headerCells.length < EXPECTED_HEADER.length ||
     EXPECTED_HEADER.some((h, i) => headerCells[i] !== h)
@@ -59,9 +52,11 @@ export function parseCsv(text: string, fileName: string): RawWaveform {
 
   for (let i = headerIndex + 1; i < lines.length; i++) {
     const raw = lines[i];
+    // Skip blank lines anywhere in the data section.
     if (raw.trim().length === 0) continue;
 
     const cells = stripTrailingComma(raw.trim()).split(",").map((c) => c.trim());
+    // Each data row must provide at least three values.
     if (cells.length < 3) {
       throw new Error(CSV_PARSE_ERRORS.row);
     }
@@ -70,19 +65,24 @@ export function parseCsv(text: string, fileName: string): RawWaveform {
     const v1 = Number(cells[1]);
     const v2 = Number(cells[2]);
 
+    // All three leading values must be finite numbers (no NaN/Infinity).
     if (!Number.isFinite(t) || !Number.isFinite(v1) || !Number.isFinite(v2)) {
       throw new Error(CSV_PARSE_ERRORS.row);
     }
 
+    // Convert Time [s] to microseconds: 1 s = 1_000_000 µs.
     timeUs.push(t * 1_000_000);
+    // Transmitter / Receiver columns are already in volts; store as-is.
     transmitterVRaw.push(v1);
     receiverVRaw.push(v2);
   }
 
+  // At least two points are required to draw a line.
   if (timeUs.length < 2) {
     throw new Error(CSV_PARSE_ERRORS.few);
   }
 
+  // Time column must be strictly monotonically increasing.
   for (let i = 1; i < timeUs.length; i++) {
     if (!(timeUs[i] > timeUs[i - 1])) {
       throw new Error(CSV_PARSE_ERRORS.monotonic);
@@ -92,21 +92,18 @@ export function parseCsv(text: string, fileName: string): RawWaveform {
   return { fileName, timeUs, transmitterVRaw, receiverVRaw };
 }
 
+/** Remove a single trailing comma (tolerated per CSV spec). */
 function stripTrailingComma(s: string): string {
   return s.endsWith(",") ? s.slice(0, -1) : s;
 }
 
 /**
  * Apply display settings (gain, offset, trim) to a RawWaveform and
- * return the DisplayWaveform used by the chart.
+ * return the DisplayWaveform consumed by the chart.
  *
- * offset: subtract the first value of each series from the whole series.
- * trim (when enabled AND valid): keep only points with
- *   trimStartUs <= timeUs <= trimEndUs.
- *
- * trim errors (trimStartUs >= trimEndUs) are NOT handled here; callers
- * must validate via validateTrim before calling so the previous chart
- * stays intact.
+ * trim range errors (trimStartUs >= trimEndUs) are NOT handled here;
+ * callers must guard with validateTrim so an invalid range never
+ * destroys an already-rendered chart.
  */
 export function buildDisplayWaveform(
   raw: RawWaveform,
@@ -116,6 +113,8 @@ export function buildDisplayWaveform(
   const txRaw = raw.transmitterVRaw;
   const rxRaw = raw.receiverVRaw;
 
+  // Baselines used for offset correction are derived from the raw first
+  // sample, so offset is consistent whether or not trim drops that sample.
   const txGain = txRaw[0] * settings.amplitudeGain;
   const rxBase = rxRaw[0];
 
@@ -125,14 +124,17 @@ export function buildDisplayWaveform(
 
   for (let i = 0; i < n; i++) {
     const t = raw.timeUs[i];
+    // When trim is on, drop points outside the inclusive [start, end] window.
     if (
       settings.trimEnabled &&
       (t < settings.trimStartUs || t > settings.trimEndUs)
     ) {
       continue;
     }
+    // Apply gain to the Transmitter only (Receiver stays unscaled).
     let tx = txRaw[i] * settings.amplitudeGain;
     let rx = rxRaw[i];
+    // Offset correction subtracts each series' initial value.
     if (settings.offsetEnabled) {
       tx -= txGain;
       rx -= rxBase;
@@ -142,6 +144,8 @@ export function buildDisplayWaveform(
     rxOut.push(rx);
   }
 
+  // If every point was trimmed out, return empty arrays rather than null
+  // so callers can distinguish "no data after trim" from "no file loaded".
   if (timeOut.length === 0) {
     return { timeUs: [], transmitterV: [], receiverV: [] };
   }
@@ -150,9 +154,10 @@ export function buildDisplayWaveform(
 }
 
 /**
- * Validate trim settings. Returns an error message string when the trim
- * range is invalid (so callers can avoid clearing the existing chart),
- * or null when valid (including when trim is disabled).
+ * Validate trim settings. Returns an English error string when the
+ * trim range is invalid (start >= end), or null when valid (including
+ * when trim is disabled). Callers use this to decide whether to
+ * re-render the chart without destroying the existing one.
  */
 export function validateTrim(settings: DisplaySettings): string | null {
   if (settings.trimEnabled && settings.trimStartUs >= settings.trimEndUs) {
@@ -162,8 +167,8 @@ export function validateTrim(settings: DisplaySettings): string | null {
 }
 
 /**
- * Convenience helper used by App to parse a File into a RawWaveform.
- * Reads the file as text in the browser only; nothing is uploaded.
+ * Read a File into a RawWaveform using FileReader. The file is read
+ * entirely in-browser memory; nothing is uploaded or persisted.
  */
 export function readCsvFile(file: File): Promise<RawWaveform> {
   return new Promise((resolve, reject) => {

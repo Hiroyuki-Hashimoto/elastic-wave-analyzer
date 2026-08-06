@@ -11,9 +11,9 @@ type Props = {
 };
 
 /**
- * Settings + file input panel. All state lives in App; this component
- * is presentational except for formatting input events into settings
- * changes. Drag-and-drop is wired onto the dropzone wrapper.
+ * Presentational settings panel: file picker + dropzone, gain/offset/trim
+ * inputs, and the error list. All state lives in App; this component
+ * only formats DOM events into settings-change callbacks.
  */
 export default function SettingsPanel({
   settings,
@@ -25,6 +25,7 @@ export default function SettingsPanel({
 }: Props) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  /** Patch a subset of settings and forward the merged value to App. */
   const update = (patch: Partial<DisplaySettings>) =>
     onSettingsChange({ ...settings, ...patch });
 
@@ -33,6 +34,7 @@ export default function SettingsPanel({
       <h2 className="settings-title">Settings</h2>
 
       <section className="settings-section">
+        {/* Hidden native file input triggered by the button click. */}
         <button
           type="button"
           className="file-button"
@@ -48,12 +50,15 @@ export default function SettingsPanel({
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) onSelectFile(f);
+            // Reset value so selecting the same file twice still fires.
             e.target.value = "";
           }}
         />
+        {/* Dropzone: accept drag-and-drop of a single CSV file. */}
         <div
           className="dropzone"
           onDragOver={(e) => {
+            // preventDefault is required to allow subsequent drop.
             e.preventDefault();
           }}
           onDrop={(e) => {
@@ -75,6 +80,7 @@ export default function SettingsPanel({
             value={settings.amplitudeGain}
             onChange={(e) => {
               const v = Number(e.target.value);
+              // Fall back to 0 when the field is empty/non-numeric.
               update({ amplitudeGain: Number.isFinite(v) ? v : 0 });
             }}
           />
@@ -127,6 +133,7 @@ export default function SettingsPanel({
 
       <section className="settings-section">
         <h3 className="errors-heading">Errors</h3>
+        {/* Empty error list shows a friendly placeholder. */}
         {errors.length === 0 ? (
           <p className="errors-empty">No errors.</p>
         ) : (

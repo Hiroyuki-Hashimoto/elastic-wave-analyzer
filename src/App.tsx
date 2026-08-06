@@ -13,6 +13,11 @@ import {
   type RawWaveform,
 } from "./types";
 
+/**
+ * App holds all Phase 0–1 state: the loaded waveform, display settings,
+ * and error list. Settings changes are projected into a DisplayWaveform
+ * via lib/waveform and forwarded to WaveformChart. No global state.
+ */
 export default function App() {
   const [raw, setRaw] = useState<RawWaveform | null>(null);
   const [settings, setSettings] = useState<DisplaySettings>(
@@ -29,14 +34,16 @@ export default function App() {
     null,
   );
 
+  // Re-derive the display waveform whenever the file or settings change.
   useEffect(() => {
+    // No file loaded: clear any cached good display and hide the chart.
     if (!raw) {
       goodDisplayRef.current = null;
       setChartDisplay(null);
       return;
     }
+    // Invalid trim range: keep the existing chart; surface error in panel.
     if (trimError) {
-      // Leave the existing chart intact; show the error in the panel.
       return;
     }
     const next = buildDisplayWaveform(raw, settings);
@@ -44,18 +51,21 @@ export default function App() {
     setChartDisplay(next);
   }, [raw, settings, trimError]);
 
+  // Combine parse errors with the current trim error (if any) for display.
   const effectiveErrors = useMemo(() => {
     const list = [...errors];
     if (trimError) list.push(trimError);
     return list;
   }, [errors, trimError]);
 
+  /**
+   * Handle a user-selected or dropped file: validate extension, read,
+   * parse, and either store the RawWaveform or surface an English error.
+   */
   const handleFile = async (file: File) => {
-    // Reset previous file-level errors when loading a new file. Stale
-    // "previous good" display is intentionally kept until the new file
-    // produces a valid replacement (or, on parse failure, the empty state
-    // is shown below).
+    // Clear previous file-level errors when starting a new load.
     setErrors([]);
+    // Reject anything that is not a .csv file (by name or MIME).
     if (!/\.csv$/i.test(file.name) && file.type !== "text/csv") {
       setErrors([
         "Unsupported CSV format. Expected: Time [s], Transmitter [V], Receiver [V].",
@@ -67,6 +77,7 @@ export default function App() {
       const parsed = await readCsvFile(file);
       setRaw(parsed);
     } catch (e) {
+      // On parse failure, drop the waveform and show the parser error.
       setRaw(null);
       setErrors([e instanceof Error ? e.message : String(e)]);
     }
@@ -90,6 +101,7 @@ export default function App() {
         />
 
         <section className="chart-area">
+          {/* Show chart only when a file is loaded and a valid display exists. */}
           {raw && chartDisplay ? (
             <WaveformChart display={chartDisplay} />
           ) : (

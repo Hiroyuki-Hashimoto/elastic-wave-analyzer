@@ -6,6 +6,7 @@ import type { AnalysisResult } from "../types";
  * detection, and zoom state. Nothing here performs IO or mutation.
  */
 
+/** A single user pick, snapped to a sample in the active DisplayWaveform. */
 export type PickPoint = {
   /** Sample index in the active DisplayWaveform time array. */
   index: number;
@@ -13,6 +14,7 @@ export type PickPoint = {
   valueV: number;
 };
 
+/** Holds the four STS/PTP picks; null until the user selects them. */
 export type PickerState = {
   stsStart: PickPoint | null;
   stsArrival: PickPoint | null;
@@ -20,6 +22,7 @@ export type PickerState = {
   ptpArrival: PickPoint | null;
 };
 
+/** Return a PickerState with all four picks unset. */
 export function emptyPickerState(): PickerState {
   return {
     stsStart: null,
