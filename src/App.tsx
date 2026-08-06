@@ -429,6 +429,10 @@ export default function App() {
             </p>
           ) : null}
 
+          {/* Static 3-line guidance for the active file (only when a chart
+              is visible and the user can act on it). */}
+          {currentRaw ? <PickGuidance /> : null}
+
           {/* Show chart only when a file is loaded and a valid display exists. */}
           {currentRaw && chartDisplay ? (
             <WaveformChart
@@ -459,6 +463,32 @@ export default function App() {
           <NotificationPanel notices={notices} />
         </section>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Static 3-line guidance that always sits above the chart while a
+ * file is loaded. It tells the user the picking goal, the click
+ * semantics, and the global keyboard shortcuts. The text never
+ * changes between renders because the spec calls for a fixed help
+ * block, not a dynamic next-step indicator.
+ */
+function PickGuidance() {
+  return (
+    <div className="pick-guidance">
+      <p className="pick-guidance-line">
+        Pick the start and peak points for both Trigger and Receiver.
+      </p>
+      <p className="pick-guidance-line">
+        Left click: set Start (rise) point (auto-derives Peak point
+        on the same axis). Right click: set Peak point manually.
+      </p>
+      <p className="pick-guidance-line">
+        <kbd>Enter</kbd> confirm{" · "}
+        <kbd>Esc</kbd> skip this file{" · "}
+        <kbd>Z</kbd> zoom
+      </p>
     </div>
   );
 }
