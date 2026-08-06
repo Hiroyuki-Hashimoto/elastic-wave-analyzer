@@ -198,6 +198,17 @@ body,
   font-size: 14px;
 }
 
+.picker-summary {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
 @media (max-width: 760px) {
   .app-main {
     grid-template-columns: 1fr;

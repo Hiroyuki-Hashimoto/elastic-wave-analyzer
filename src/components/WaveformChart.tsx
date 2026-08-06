@@ -1,24 +1,47 @@
 import { useEffect, useRef } from "react";
 import UPlot from "uplot";
-import type { DisplayWaveform } from "../types";
+import {
+  findNearestSampleIndex,
+  findReceiverPtpIndex,
+  findTriggerPtpIndex,
+} from "../lib/picker";
+import type {
+  DisplayWaveform,
+  PickAxis,
+  PickKind,
+  PickPoint,
+  PickerState,
+} from "../types";
 
 type Props = {
   display: DisplayWaveform | null;
+  picker: PickerState;
+  onPick: (axis: PickAxis, kind: PickKind, point: PickPoint) => void;
 };
 
 /**
  * Render the Trigger (top) and Receiver (bottom) waveforms as two
- * uPlot instances sharing a single numeric microsecond x-axis. uPlot
- * instances are destroyed on unmount and before each rebuild to avoid
- * double-generation and canvas leaks.
+ * uPlot instances sharing a single numeric microsecond x-axis, with
+ * left/right mouse interaction for STS/PTP picking. uPlot instances
+ * are destroyed on unmount and before each rebuild; click and context
+ * listeners are removed on the same lifecycle to avoid leaks.
  */
-export default function WaveformChart({ display }: Props) {
+export default function WaveformChart({ display, picker, onPick }: Props) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const receiverRef = useRef<HTMLDivElement>(null);
   const triggerPlotRef = useRef<UPlot | null>(null);
   const receiverPlotRef = useRef<UPlot | null>(null);
 
-  // (Re)build the plots whenever the display data changes.
+  // Latest props kept in refs so native listeners/hook closures can read
+  // the most recent values without rebinding on every render.
+  const pickerRef = useRef(picker);
+  pickerRef.current = picker;
+  const displayRef = useRef(display);
+  displayRef.current = display;
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
+
+  // (Re)build the plots whenever display data OR picker markers change.
   useEffect(() => {
     // No data: destroy any existing plots and show nothing.
     if (!display || display.timeUs.length === 0) {
@@ -34,14 +57,17 @@ export default function WaveformChart({ display }: Props) {
 
     // uPlot.AlignedData: first array is the shared x-axis, later arrays
     // are the y values per series.
-    const triggerData: UPlot.AlignedData = [
-      time,
-      display.transmitterV,
-    ];
-    const receiverData: UPlot.AlignedData = [
-      time,
-      display.receiverV,
-    ];
+    const triggerData: UPlot.AlignedData = [time, display.transmitterV];
+    const receiverData: UPlot.AlignedData = [time, display.receiverV];
+
+    const triggerMarkers = {
+      sts: picker.triggerSts,
+      ptp: picker.triggerPtp,
+    };
+    const receiverMarkers = {
+      sts: picker.receiverSts,
+      ptp: picker.receiverPtp,
+    };
 
     const triggerOpts = buildOptions(
       "Trigger (with gain)",
@@ -49,6 +75,7 @@ export default function WaveformChart({ display }: Props) {
       xMin,
       xMax,
       display.transmitterV,
+      triggerMarkers,
     );
     const receiverOpts = buildOptions(
       "Receiver",
@@ -56,6 +83,7 @@ export default function WaveformChart({ display }: Props) {
       xMin,
       xMax,
       display.receiverV,
+      receiverMarkers,
     );
 
     // Always destroy previous instances before creating new ones to
@@ -66,10 +94,20 @@ export default function WaveformChart({ display }: Props) {
     // uPlot constructor: (options, data, mountNode) mounts the chart
     // synchronously into the given DOM element.
     if (triggerRef.current) {
-      triggerPlotRef.current = new UPlot(triggerOpts, triggerData, triggerRef.current);
+      triggerPlotRef.current = new UPlot(
+        triggerOpts,
+        triggerData,
+        triggerRef.current,
+      );
+      attachPickListeners("trigger", triggerPlotRef.current);
     }
     if (receiverRef.current) {
-      receiverPlotRef.current = new UPlot(receiverOpts, receiverData, receiverRef.current);
+      receiverPlotRef.current = new UPlot(
+        receiverOpts,
+        receiverData,
+        receiverRef.current,
+      );
+      attachPickListeners("receiver", receiverPlotRef.current);
     }
 
     // Cleanup on unmount or before next rebuild: tear down both plots.
@@ -77,7 +115,86 @@ export default function WaveformChart({ display }: Props) {
       destroyPlots(triggerPlotRef, triggerRef);
       destroyPlots(receiverPlotRef, receiverRef);
     };
-  }, [display]);
+  }, [display, picker]);
+
+  /**
+   * Attach mousedown + contextmenu listeners to the uPlot overlay div
+   * so left clicks pick STS, right clicks pick PTP, and right-click
+   * inside the chart never opens the browser context menu. Listeners
+   * are stored on the plot instance via closure cleanup is implicit on
+   * destroy since the host DOM (u.over) is removed.
+   */
+  function attachPickListeners(axis: PickAxis, plot: UPlot) {
+    const over = plot.over;
+
+    // Prevent the browser context menu only inside this chart's overlay.
+    const onContext = (e: MouseEvent) => e.preventDefault();
+    over.addEventListener("contextmenu", onContext);
+
+    over.addEventListener("mousedown", (e: MouseEvent) => {
+      // Left button = STS, right button = PTP; ignore middle/other buttons.
+      if (e.button !== 0 && e.button !== 2) return;
+      const kind: PickKind = e.button === 2 ? "ptp" : "sts";
+      handlePickClick(axis, kind, plot, e);
+    });
+  }
+
+  /**
+   * Convert a mouse click into a snapped PickPoint and forward it to
+   * the App via onPick. STS snaps to the nearest displayed sample; PTP
+   * uses the global Trigger argmax or the first Receiver peak after the
+   * already-selected STS index, falling back to the click nearest when
+   * the STS pick is missing.
+   */
+  function handlePickClick(
+    axis: PickAxis,
+    kind: PickKind,
+    plot: UPlot,
+    e: MouseEvent,
+  ) {
+    const disp = displayRef.current;
+    if (!disp || disp.timeUs.length === 0) return;
+    const rect = plot.over.getBoundingClientRect();
+    // CSS pixel x relative to the plot overlay; clamped inside the area.
+    const leftPx = e.clientX - rect.left;
+    if (leftPx < 0 || leftPx > rect.width) return;
+    // uPlot.posToVal maps an overlay CSS x back to a data value (µs).
+    const dataX = plot.posToVal(leftPx, "time-us");
+    if (!Number.isFinite(dataX)) return;
+
+    const time = disp.timeUs;
+    const values = axis === "trigger" ? disp.transmitterV : disp.receiverV;
+
+    let index = -1;
+    if (kind === "sts") {
+      // STS: snap the click to the nearest displayed sample.
+      index = findNearestSampleIndex(time, dataX);
+    } else if (axis === "trigger") {
+      // Trigger PTP: always the global maximum of the displayed Trigger.
+      index = findTriggerPtpIndex(values);
+    } else {
+      // Receiver PTP: search after the chosen Receiver STS; if STS is
+      // not yet picked, use the click's nearest sample as the search start.
+      const stsIdx =
+        pickerRef.current.receiverSts?.index ??
+        findNearestSampleIndex(time, dataX);
+      index = findReceiverPtpIndex(values, stsIdx);
+    }
+    if (index < 0 || index >= time.length) return;
+    onPickRef.current(axis, kind, {
+      axis,
+      kind,
+      index,
+      timeUs: time[index],
+      voltage: values[index],
+    });
+  }
+
+  // Picker summary strings: "--" for unset points, formatted µs otherwise.
+  const triggerStsLabel = formatPick(picker.triggerSts);
+  const triggerPtpLabel = formatPick(picker.triggerPtp);
+  const receiverStsLabel = formatPick(picker.receiverSts);
+  const receiverPtpLabel = formatPick(picker.receiverPtp);
 
   return (
     <div className="chart-stack">
@@ -87,13 +204,26 @@ export default function WaveformChart({ display }: Props) {
       <div className="chart-block">
         <div className="chart-host" ref={receiverRef} />
       </div>
+      <p className="picker-summary">
+        Trigger — STS: {triggerStsLabel} | PTP: {triggerPtpLabel}
+        <br />
+        Receiver — STS: {receiverStsLabel} | PTP: {receiverPtpLabel}
+      </p>
     </div>
   );
 }
 
+type ChartMarkers = {
+  sts: PickPoint | null;
+  ptp: PickPoint | null;
+};
+
 /**
  * Build a uPlot options object for one chart with a numeric microsecond
- * x-axis and an auto-padded y-axis fitted to the given values.
+ * x-axis and an auto-padded y-axis fitted to the given values. The
+ * draw hook paints STS (red) and PTP (green) vertical markers plus
+ * time annotations directly on the uPlot series canvas so they appear
+ * in the chart and survive PNG export later.
  */
 function buildOptions(
   title: string,
@@ -101,6 +231,7 @@ function buildOptions(
   xMin: number,
   xMax: number,
   values: number[],
+  markers: ChartMarkers,
 ): UPlot.Options {
   // Compute y-axis bounds from finite values only; guard against flat data.
   const ys = values.filter(Number.isFinite);
@@ -158,7 +289,64 @@ function buildOptions(
       y: { min: yMin, max: yMax },
     },
     cursor: { show: true },
+    hooks: {
+      // uPlot hook fired after axes, grid, and series are all drawn.
+      // We draw marker lines/annotations here so they overlay the trace
+      // and remain part of the same canvas (PNG export in Step 2-6).
+      draw: [(u) => drawMarkers(u, markers)],
+    },
   };
+}
+
+/**
+ * Draw STS (red) and PTP (green) vertical markers and time annotations
+ * onto the uPlot series canvas using uPlot's valToPos mapping.
+ */
+function drawMarkers(u: UPlot, markers: ChartMarkers) {
+  if (!markers.sts && !markers.ptp) return;
+  const ctx = u.ctx;
+  // bbox is the plot drawing area in canvas pixels.
+  const top = u.bbox.top;
+  const bottom = u.bbox.top + u.bbox.height;
+
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.font = "11px sans-serif";
+  ctx.textBaseline = "top";
+
+  // STS marker: red vertical line with time label near the top axis.
+  if (markers.sts) {
+    // valToPos(dataValue, scaleKey, canvasPixels=true) → canvas pixel x.
+    const x = u.valToPos(markers.sts.timeUs, "time-us", true);
+    ctx.strokeStyle = "#d62728";
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+    // Annotation: short time string anchored just inside the plot area.
+    const label = `${formatPick(markers.sts)} µs`;
+    ctx.fillStyle = "#d62728";
+    ctx.fillText(label, x + 4, top + 4);
+  }
+  // PTP marker: green vertical line with time label near the top axis.
+  if (markers.ptp) {
+    const x = u.valToPos(markers.ptp.timeUs, "time-us", true);
+    ctx.strokeStyle = "#2ca02c";
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+    const label = `${formatPick(markers.ptp)} µs`;
+    ctx.fillStyle = "#2ca02c";
+    // Nudge PTP label a few pixels lower so STS+PTP labels don't collide.
+    ctx.fillText(label, x + 4, top + 20);
+  }
+  ctx.restore();
+}
+
+/** Format a pick's timeUs to one decimal place; "--" for unset points. */
+function formatPick(point: PickPoint | null): string {
+  return point ? point.timeUs.toFixed(1) : "--";
 }
 
 /** Destroy the uPlot instance held in plotRef, if any, and clear the ref. */

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import SettingsPanel from "./components/SettingsPanel";
 import WaveformChart from "./components/WaveformChart";
+import { emptyPickerState } from "./lib/picker";
 import {
   buildDisplayWaveform,
   readCsvFile,
@@ -10,13 +11,18 @@ import {
   DEFAULT_DISPLAY_SETTINGS,
   type DisplaySettings,
   type DisplayWaveform,
+  type PickAxis,
+  type PickKind,
+  type PickPoint,
+  type PickerState,
   type RawWaveform,
 } from "./types";
 
 /**
- * App holds all Phase 0–1 state: the loaded waveform, display settings,
- * and error list. Settings changes are projected into a DisplayWaveform
- * via lib/waveform and forwarded to WaveformChart. No global state.
+ * App holds all Phase 0–2 state: the loaded waveform, display settings,
+ * the active picker state, and error list. Settings changes are projected
+ * into a DisplayWaveform via lib/waveform and forwarded to WaveformChart.
+ * No global state library is used.
  */
 export default function App() {
   const [raw, setRaw] = useState<RawWaveform | null>(null);
@@ -24,6 +30,9 @@ export default function App() {
     DEFAULT_DISPLAY_SETTINGS,
   );
   const [errors, setErrors] = useState<string[]>([]);
+  // Picker state holds the four STS/PTP picks for the current file;
+  // replacing a pick on an axis only overwrites that axis/kind slot.
+  const [picker, setPicker] = useState<PickerState>(emptyPickerState());
 
   const trimError = useMemo(() => validateTrim(settings), [settings]);
 
@@ -76,6 +85,8 @@ export default function App() {
     try {
       const parsed = await readCsvFile(file);
       setRaw(parsed);
+      // Reset picker state for a brand-new file: no inherited picks.
+      setPicker(emptyPickerState());
     } catch (e) {
       // On parse failure, drop the waveform and show the parser error.
       setRaw(null);
@@ -83,11 +94,35 @@ export default function App() {
     }
   };
 
+  /**
+   * Receive a STS/PTP click from the chart. Replacing a pick on an axis
+   * only overwrites that axis/kind slot; the other three picks persist.
+   */
+  const handlePick = (
+    _axis: PickAxis,
+    _kind: PickKind,
+    point: PickPoint,
+  ) => {
+    setPicker((prev) => {
+      const next: PickerState = { ...prev, isConfirmed: false };
+      if (point.axis === "trigger" && point.kind === "sts") {
+        next.triggerSts = point;
+      } else if (point.axis === "trigger" && point.kind === "ptp") {
+        next.triggerPtp = point;
+      } else if (point.axis === "receiver" && point.kind === "sts") {
+        next.receiverSts = point;
+      } else if (point.axis === "receiver" && point.kind === "ptp") {
+        next.receiverPtp = point;
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="app-shell">
       <header className="app-header">
         <h1>Elastic Wave Analyzer</h1>
-        <p className="app-subtitle">Phase 0–1: single-CSV load &amp; display</p>
+        <p className="app-subtitle">Phase 2: manual STS/PTP picking</p>
       </header>
 
       <main className="app-main">
@@ -103,7 +138,11 @@ export default function App() {
         <section className="chart-area">
           {/* Show chart only when a file is loaded and a valid display exists. */}
           {raw && chartDisplay ? (
-            <WaveformChart display={chartDisplay} />
+            <WaveformChart
+              display={chartDisplay}
+              picker={picker}
+              onPick={handlePick}
+            />
           ) : (
             <div className="empty-state">
               No data loaded. Please select a CSV file.
