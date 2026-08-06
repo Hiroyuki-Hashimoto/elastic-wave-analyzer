@@ -140,11 +140,10 @@ export default function WaveformChart({ display, picker, onPick }: Props) {
   }
 
   /**
-   * Convert a mouse click into a snapped PickPoint and forward it to
-   * the App via onPick. STS snaps to the nearest displayed sample; PTP
-   * uses the global Trigger argmax or the first Receiver peak after the
-   * already-selected STS index, falling back to the click nearest when
-   * the STS pick is missing.
+   * Convert a mouse click into snapped PickPoint(s) and forward them
+   * to App via onPick. A left-click sets STS AND auto-derives the PTP
+   * for the same axis (Trigger uses global argmax, Receiver uses
+   * argmax of values[stsIdx:]); a right-click only replaces the PTP.
    */
   function handlePickClick(
     axis: PickAxis,
@@ -155,7 +154,7 @@ export default function WaveformChart({ display, picker, onPick }: Props) {
     const disp = displayRef.current;
     if (!disp || disp.timeUs.length === 0) return;
     const rect = plot.over.getBoundingClientRect();
-    // CSS pixel x relative to the plot overlay; clamped inside the area.
+    // CSS pixel x relative to the plot overlay; ignore clicks outside.
     const leftPx = e.clientX - rect.left;
     if (leftPx < 0 || leftPx > rect.width) return;
     // uPlot.posToVal maps an overlay CSS x back to a data value (µs).
@@ -165,29 +164,42 @@ export default function WaveformChart({ display, picker, onPick }: Props) {
     const time = disp.timeUs;
     const values = axis === "trigger" ? disp.transmitterV : disp.receiverV;
 
-    let index = -1;
+    // Helper: snap to a given sample index and emit a pick for this axis.
+    const emit = (idx: number, k: PickKind) => {
+      if (idx < 0 || idx >= time.length) return;
+      onPickRef.current(axis, k, {
+        axis,
+        kind: k,
+        index: idx,
+        timeUs: time[idx],
+        voltage: values[idx],
+      });
+    };
+
     if (kind === "sts") {
-      // STS: snap the click to the nearest displayed sample.
-      index = findNearestSampleIndex(time, dataX);
-    } else if (axis === "trigger") {
-      // Trigger PTP: always the global maximum of the displayed Trigger.
-      index = findTriggerPtpIndex(values);
+      // Left-click: snap STS to nearest sample, then auto-derive PTP.
+      const stsIdx = findNearestSampleIndex(time, dataX);
+      emit(stsIdx, "sts");
+      // Trigger PTP = argmax over the whole displayed Trigger; Receiver
+      // PTP = argmax over values[stsIdx:] (matches Python on_left_click).
+      if (axis === "trigger") {
+        emit(findTriggerPtpIndex(values), "ptp");
+      } else {
+        emit(findReceiverPtpIndex(values, stsIdx), "ptp");
+      }
     } else {
-      // Receiver PTP: search after the chosen Receiver STS; if STS is
-      // not yet picked, use the click's nearest sample as the search start.
-      const stsIdx =
-        pickerRef.current.receiverSts?.index ??
-        findNearestSampleIndex(time, dataX);
-      index = findReceiverPtpIndex(values, stsIdx);
+      // Right-click: replace only PTP on this axis.
+      if (axis === "trigger") {
+        emit(findTriggerPtpIndex(values), "ptp");
+      } else {
+        // Use already-selected Receiver STS; on missing STS fall back to
+        // the click's nearest sample as the search start.
+        const stsIdx =
+          pickerRef.current.receiverSts?.index ??
+          findNearestSampleIndex(time, dataX);
+        emit(findReceiverPtpIndex(values, stsIdx), "ptp");
+      }
     }
-    if (index < 0 || index >= time.length) return;
-    onPickRef.current(axis, kind, {
-      axis,
-      kind,
-      index,
-      timeUs: time[index],
-      voltage: values[index],
-    });
   }
 
   // Picker summary strings: "--" for unset points, formatted µs otherwise.

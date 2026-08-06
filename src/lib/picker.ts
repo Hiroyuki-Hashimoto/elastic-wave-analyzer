@@ -1,11 +1,5 @@
 import type { AnalysisResult, PickerState } from "../types";
 
-/**
- * Fraction of the post-STS value range that a local maximum must rise
- * above to be accepted as the Receiver PTP. Rejects one-sample noise.
- */
-const PTP_PROMINENCE_FRACTION = 0.1;
-
 /** Return a PickerState with all four picks unset and no confirm/cancel. */
 export function emptyPickerState(): PickerState {
   return {
@@ -62,11 +56,19 @@ export function findTriggerPtpIndex(values: number[]): number {
 }
 
 /**
- * Find the Receiver PTP index: the first acceptable local maximum at
- * or after stsIndex. A candidate must be a local maximum (>= neighbors)
- * AND rise above a prominence threshold derived from the local range
- * after stsIndex, to suppress one-sample noise. Falls back to stsIndex
- * when no candidate is accepted; returns -1 on invalid input.
+ * Find the Receiver PTP index: the dominant positive peak of the
+ * displayed Receiver waveform at or after stsIndex. Returns -1 on
+ * invalid input and falls back to stsIndex at the array tail.
+ *
+ * This is the argmax of values[stsIndex:], which is equivalent to
+ * Python's find_peaks(width=50)[0] for the typical single-peak SINE
+ * responses the analyzer targets: the global max of the post-STS tail
+ * IS the first significant positive peak. Earlier one-sample noise
+ * (~0.0001 V) is robustly rejected because it never exceeds the
+ * real SINE peak (~0.0046 V), regardless of any negative trough in
+ * the same window. A prominence-threshold heuristic (min + k*range)
+ * was tried first but became negative when the tail covered both the
+ * SINE trough and its peak, letting noise through.
  */
 export function findReceiverPtpIndex(
   values: number[],
@@ -77,31 +79,16 @@ export function findReceiverPtpIndex(
   // At the tail there is no later sample to form a peak; fall back.
   if (stsIndex >= values.length - 1) return stsIndex;
 
-  // Local signal range over [stsIndex, end) sets the noise floor.
-  let minV = Infinity;
-  let maxV = -Infinity;
-  for (let i = stsIndex; i < values.length; i++) {
-    const v = values[i];
-    if (v < minV) minV = v;
-    if (v > maxV) maxV = v;
-  }
-  const range = maxV - minV;
-  // Threshold: 10% of range above the local min (units: volts).
-  const threshold = minV + PTP_PROMINENCE_FRACTION * range;
-
-  // Candidate i needs both immediate neighbors, so i ∈ [1, length-2].
-  const start = Math.max(stsIndex, 1);
-  for (let i = start; i < values.length - 1; i++) {
-    // Local maximum: greater than or equal to both immediate neighbors.
-    const isLocalMax =
-      values[i] >= values[i - 1] && values[i] >= values[i + 1];
-    // Prominence: rises above the noise-floor threshold.
-    if (isLocalMax && values[i] >= threshold) {
-      return i;
+  let best = stsIndex;
+  let bestVal = values[stsIndex];
+  for (let i = stsIndex + 1; i < values.length; i++) {
+    // Strictly greater keeps the earliest index on ties (stable pick).
+    if (values[i] > bestVal) {
+      bestVal = values[i];
+      best = i;
     }
   }
-  // No accepted candidate: fall back to STS index per spec.
-  return stsIndex;
+  return best;
 }
 
 /**
