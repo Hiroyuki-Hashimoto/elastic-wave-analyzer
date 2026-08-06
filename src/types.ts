@@ -13,6 +13,8 @@ export type DisplaySettings = {
   trimEnabled: boolean;
   trimStartUs: number;
   trimEndUs: number;
+  /** Half-width of the search window for PTP peak detection, in µs. */
+  peakWidthUs: number;
 };
 
 /** Waveform after applying display settings; consumed directly by the chart. */
@@ -75,4 +77,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   trimEnabled: false,
   trimStartUs: -50,
   trimEndUs: 800,
+  // PTP peak detection window half-width. ~10 kHz, so one full cycle
+  // is ~100 µs and the half-period is ~50 µs. Adjustable in Settings.
+  peakWidthUs: 50,
 };

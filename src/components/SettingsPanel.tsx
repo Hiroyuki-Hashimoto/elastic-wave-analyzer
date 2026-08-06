@@ -129,6 +129,22 @@ export default function SettingsPanel({
             }}
           />
         </label>
+
+        <label className="field">
+          <span className="field-label">Peak search width (µs)</span>
+          <input
+            type="number"
+            step="any"
+            min="0"
+            value={settings.peakWidthUs}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              // Negative or non-finite input is clamped to 0 to keep peak
+              // search well-defined in the picker helpers.
+              update({ peakWidthUs: Number.isFinite(v) && v >= 0 ? v : 0 });
+            }}
+          />
+        </label>
       </section>
 
       <section className="settings-section">
