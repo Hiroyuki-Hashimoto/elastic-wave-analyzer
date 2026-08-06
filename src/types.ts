@@ -37,6 +37,37 @@ export type AnalysisResult = {
   ptpDeltaTUs: number | null;
 };
 
+/** Which chart a pick belongs to: upper Trigger or lower Receiver. */
+export type PickAxis = "trigger" | "receiver";
+
+/** Which kind of pick: STS (start) or PTP (peak/arrival). */
+export type PickKind = "sts" | "ptp";
+
+/** One snapped user pick with axis/kind metadata and sample coordinates. */
+export type PickPoint = {
+  axis: PickAxis;
+  kind: PickKind;
+  index: number;
+  timeUs: number;
+  voltage: number;
+};
+
+/** All four picks for a single file plus confirm/cancel flags. */
+export type PickerState = {
+  triggerSts: PickPoint | null;
+  triggerPtp: PickPoint | null;
+  receiverSts: PickPoint | null;
+  receiverPtp: PickPoint | null;
+  isConfirmed: boolean;
+  isCanceled: boolean;
+};
+
+/**
+ * Seven zoom levels cycled by the Z key; values are the fraction of the
+ * original x-range that remains visible (left boundary is preserved).
+ */
+export const ZOOM_PERCENTAGES = [1.0, 0.7, 0.5, 0.3, 0.2, 0.15, 0.1] as const;
+
 /** Initial settings matching the Python reference defaults for Bristol CSVs. */
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   amplitudeGain: 20,

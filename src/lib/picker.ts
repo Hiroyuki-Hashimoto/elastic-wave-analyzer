@@ -1,46 +1,157 @@
-import type { AnalysisResult } from "../types";
+import type { AnalysisResult, PickerState } from "../types";
 
 /**
- * Phase 0–1: type definitions and extension points only.
- * Phase 2 will add STS/PTP picking, nearest-sample snapping, peak
- * detection, and zoom state. Nothing here performs IO or mutation.
+ * Fraction of the post-STS value range that a local maximum must rise
+ * above to be accepted as the Receiver PTP. Rejects one-sample noise.
  */
+const PTP_PROMINENCE_FRACTION = 0.1;
 
-/** A single user pick, snapped to a sample in the active DisplayWaveform. */
-export type PickPoint = {
-  /** Sample index in the active DisplayWaveform time array. */
-  index: number;
-  timeUs: number;
-  valueV: number;
-};
-
-/** Holds the four STS/PTP picks; null until the user selects them. */
-export type PickerState = {
-  stsStart: PickPoint | null;
-  stsArrival: PickPoint | null;
-  ptpStart: PickPoint | null;
-  ptpArrival: PickPoint | null;
-};
-
-/** Return a PickerState with all four picks unset. */
+/** Return a PickerState with all four picks unset and no confirm/cancel. */
 export function emptyPickerState(): PickerState {
   return {
-    stsStart: null,
-    stsArrival: null,
-    ptpStart: null,
-    ptpArrival: null,
+    triggerSts: null,
+    triggerPtp: null,
+    receiverSts: null,
+    receiverPtp: null,
+    isConfirmed: false,
+    isCanceled: false,
   };
 }
 
 /**
- * Phase 2: derive AnalysisResult from a PickerState by computing the
- * delta-T values and projecting picks into the AnalysisResult shape.
- * Implemented in Phase 2.
+ * Find the index of the sample nearest to a clicked x-coordinate in µs.
+ * Equivalent to Python: np.abs(Time - clickX).argmin().
+ * Returns -1 for empty input so click handlers can short-circuit.
+ */
+export function findNearestSampleIndex(
+  timeUs: number[],
+  clickX: number,
+): number {
+  // Empty input: no valid target for a click.
+  if (!Array.isArray(timeUs) || timeUs.length === 0) return -1;
+  let best = 0;
+  let bestDist = Math.abs(timeUs[0] - clickX);
+  for (let i = 1; i < timeUs.length; i++) {
+    const d = Math.abs(timeUs[i] - clickX);
+    // Tighter match updates the running best.
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
+ * Find the Trigger PTP index: the global maximum of the displayed
+ * Trigger waveform. Mirrors Python's np.argmax(y_data) on the trigger.
+ * Returns -1 for empty input.
+ */
+export function findTriggerPtpIndex(values: number[]): number {
+  if (!Array.isArray(values) || values.length === 0) return -1;
+  let best = 0;
+  let bestVal = values[0];
+  for (let i = 1; i < values.length; i++) {
+    // Strictly greater keeps the earliest index on ties (stable pick).
+    if (values[i] > bestVal) {
+      bestVal = values[i];
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
+ * Find the Receiver PTP index: the first acceptable local maximum at
+ * or after stsIndex. A candidate must be a local maximum (>= neighbors)
+ * AND rise above a prominence threshold derived from the local range
+ * after stsIndex, to suppress one-sample noise. Falls back to stsIndex
+ * when no candidate is accepted; returns -1 on invalid input.
+ */
+export function findReceiverPtpIndex(
+  values: number[],
+  stsIndex: number,
+): number {
+  if (!Array.isArray(values) || values.length === 0) return -1;
+  if (stsIndex < 0 || stsIndex >= values.length) return -1;
+  // At the tail there is no later sample to form a peak; fall back.
+  if (stsIndex >= values.length - 1) return stsIndex;
+
+  // Local signal range over [stsIndex, end) sets the noise floor.
+  let minV = Infinity;
+  let maxV = -Infinity;
+  for (let i = stsIndex; i < values.length; i++) {
+    const v = values[i];
+    if (v < minV) minV = v;
+    if (v > maxV) maxV = v;
+  }
+  const range = maxV - minV;
+  // Threshold: 10% of range above the local min (units: volts).
+  const threshold = minV + PTP_PROMINENCE_FRACTION * range;
+
+  // Candidate i needs both immediate neighbors, so i ∈ [1, length-2].
+  const start = Math.max(stsIndex, 1);
+  for (let i = start; i < values.length - 1; i++) {
+    // Local maximum: greater than or equal to both immediate neighbors.
+    const isLocalMax =
+      values[i] >= values[i - 1] && values[i] >= values[i + 1];
+    // Prominence: rises above the noise-floor threshold.
+    if (isLocalMax && values[i] >= threshold) {
+      return i;
+    }
+  }
+  // No accepted candidate: fall back to STS index per spec.
+  return stsIndex;
+}
+
+/**
+ * Convert a PickerState into one AnalysisResult. Pick-dependent fields
+ * are null unless the state is fully confirmed with all four picks,
+ * mirroring Python's STS_deltaT / PTP_deltaT (arrival - start, µs).
  */
 export function pickerToAnalysisResult(
-  _state: PickerState,
-  _fileName: string,
+  state: PickerState,
+  fileName: string,
 ): AnalysisResult {
-  // TODO(phase-2): project picks + compute sts/ptp delta-T.
-  throw new Error("pickerToAnalysisResult: not implemented in Phase 0–1.");
+  const empty: AnalysisResult = {
+    fileName,
+    stsStartUs: null,
+    stsStartV: null,
+    stsArrivalUs: null,
+    stsArrivalV: null,
+    ptpStartUs: null,
+    ptpStartV: null,
+    ptpArrivalUs: null,
+    ptpArrivalV: null,
+    stsDeltaTUs: null,
+    ptpDeltaTUs: null,
+  };
+  // Canceled or not-yet-confirmed: no pick-dependent output.
+  if (!state || state.isCanceled || !state.isConfirmed) return empty;
+  const { triggerSts, triggerPtp, receiverSts, receiverPtp } = state;
+  // All four picks are required for a confirmed result.
+  if (!triggerSts || !triggerPtp || !receiverSts || !receiverPtp) {
+    return empty;
+  }
+
+  // STS_s/PTP_s come from the Trigger chart; STS_a/PTP_a from Receiver.
+  const stsStartUs = triggerSts.timeUs;
+  const stsArrivalUs = receiverSts.timeUs;
+  const ptpStartUs = triggerPtp.timeUs;
+  const ptpArrivalUs = receiverPtp.timeUs;
+
+  return {
+    fileName,
+    stsStartUs,
+    stsStartV: triggerSts.voltage,
+    stsArrivalUs,
+    stsArrivalV: receiverSts.voltage,
+    ptpStartUs,
+    ptpStartV: triggerPtp.voltage,
+    ptpArrivalUs,
+    ptpArrivalV: receiverPtp.voltage,
+    // Delta-T in µs: arrival time minus start time for STS and PTP.
+    stsDeltaTUs: stsArrivalUs - stsStartUs,
+    ptpDeltaTUs: ptpArrivalUs - ptpStartUs,
+  };
 }
