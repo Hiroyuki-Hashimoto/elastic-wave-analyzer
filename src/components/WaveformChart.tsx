@@ -100,6 +100,7 @@ function buildOptions(
   yMin -= pad;
   yMax += pad;
 
+  const timeUsScale = "time-us";
   return {
     title,
     width: 800,
@@ -107,7 +108,7 @@ function buildOptions(
     series: [
       {
         label: "Time (µs)",
-        scale: "x",
+        scale: timeUsScale,
       },
       {
         label: yAxisLabel,
@@ -119,8 +120,12 @@ function buildOptions(
     ],
     axes: [
       {
-        scale: "x",
+        scale: timeUsScale,
         label: "Time (µs)",
+        // uPlot treats the default "x" scale as a time axis (Unix epoch
+        // seconds). Our x values are microsecond offsets, not timestamps,
+        // so format this axis as plain numeric µs.
+        values: (_self, splits) => splits.map((v) => formatMicros(v)),
         grid: { show: true, stroke: "#dddddd", width: 1 },
         ticks: { show: true, stroke: "#cccccc", width: 1 },
       },
@@ -132,7 +137,7 @@ function buildOptions(
       },
     ],
     scales: {
-      x: { min: xMin, max: xMax },
+      [timeUsScale]: { min: xMin, max: xMax, time: false },
       y: { min: yMin, max: yMax },
     },
     cursor: { show: true },
@@ -147,4 +152,17 @@ function destroyPlots(
     plotRef.current.destroy();
     plotRef.current = null;
   }
+}
+
+function formatMicros(v: number): string {
+  if (!Number.isFinite(v)) return "";
+  // Compact formatting for axis ticks; one decimal max, drop trailing 0.
+  const abs = Math.abs(v);
+  if (abs >= 1000) return trimZeros(v.toFixed(0));
+  if (abs >= 100) return trimZeros(v.toFixed(1));
+  return trimZeros(v.toFixed(2));
+}
+
+function trimZeros(s: string): string {
+  return s.indexOf(".") === -1 ? s : s.replace(/\.?0+$/, "");
 }
