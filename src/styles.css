@@ -308,6 +308,36 @@ body,
   color: #8a1f1f;
 }
 
+.export-panel {
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.export-heading {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.export-button {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.export-button:disabled {
+  background: #c4ccd4;
+  border-color: #c4ccd4;
+  cursor: not-allowed;
+}
+
 .notification-panel {
   display: flex;
   flex-direction: column;

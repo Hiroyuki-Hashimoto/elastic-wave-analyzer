@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ExportPanel from "./components/ExportPanel";
 import NotificationPanel from "./components/NotificationPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import WaveformChart from "./components/WaveformChart";
 import { emptyPickerState, pickerToAnalysisResult } from "./lib/picker";
+import { downloadResultsCsv } from "./lib/exporter";
 import {
   buildDisplayWaveform,
   readCsvFile,
@@ -330,6 +332,23 @@ export default function App() {
     ? queue.findIndex((e) => e.id === currentEntry.id) + 1
     : 0;
 
+  /**
+   * Trigger the all-results CSV download. Disabled when there is nothing
+   * to export, so the user never gets an empty file.
+   */
+  const handleDownloadCsv = useCallback(() => {
+    if (results.length === 0) return;
+    try {
+      downloadResultsCsv(results);
+      addNotice("info", `Downloaded ${results.length} result(s) as CSV.`);
+    } catch (e) {
+      addNotice(
+        "error",
+        `CSV export failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }, [results, addNotice]);
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -373,6 +392,11 @@ export default function App() {
           )}
 
           <QueueList queue={queue} />
+
+          <ExportPanel
+            canExport={results.length > 0}
+            onDownloadCsv={handleDownloadCsv}
+          />
 
           <NotificationPanel notices={notices} />
         </section>
