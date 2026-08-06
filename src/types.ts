@@ -15,6 +15,8 @@ export type DisplaySettings = {
   trimEndUs: number;
   /** Half-width of the search window for PTP peak detection, in µs. */
   peakWidthUs: number;
+  /** Index into ZOOM_PERCENTAGES; the visible x-range shrinks accordingly. */
+  zoomIndex: number;
 };
 
 /** Waveform after applying display settings; consumed directly by the chart. */
@@ -70,6 +72,15 @@ export type PickerState = {
  */
 export const ZOOM_PERCENTAGES = [1.0, 0.7, 0.5, 0.3, 0.2, 0.15, 0.1] as const;
 
+/** Notification kind for the in-app log panel (formerly print() output). */
+export type NoticeKind = "info" | "success" | "cancel" | "warning" | "error";
+
+export type Notice = {
+  id: number;
+  kind: NoticeKind;
+  text: string;
+};
+
 /** Initial display settings chosen for typical oscilloscope CSV input. */
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   amplitudeGain: 20,
@@ -80,4 +91,6 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   // PTP peak detection window half-width. ~10 kHz, so one full cycle
   // is ~100 µs and the half-period is ~50 µs. Adjustable in Settings.
   peakWidthUs: 50,
+  // Start at 100% zoom (full x-range visible).
+  zoomIndex: 0,
 };

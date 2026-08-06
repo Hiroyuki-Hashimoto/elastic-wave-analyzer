@@ -1,4 +1,5 @@
 import React from "react";
+import { ZOOM_PERCENTAGES } from "../types";
 import type { DisplaySettings } from "../types";
 
 type Props = {
@@ -8,6 +9,8 @@ type Props = {
   onDropFile: (file: File) => void;
   errors: string[];
   fileName: string | null;
+  /** Number of results accumulated (confirmed + canceled) so far. */
+  resultCount: number;
 };
 
 /**
@@ -22,6 +25,7 @@ export default function SettingsPanel({
   onDropFile,
   errors,
   fileName,
+  resultCount,
 }: Props) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -164,6 +168,18 @@ export default function SettingsPanel({
       <section className="settings-section">
         <p className="file-name-label">Loaded file</p>
         <p className="file-name">{fileName ?? "None"}</p>
+        <p className="file-name-label">Results collected</p>
+        <p className="file-name">{resultCount}</p>
+      </section>
+
+      <section className="settings-section">
+        <p className="zoom-label">
+          Zoom:{" "}
+          {Math.round(
+            (ZOOM_PERCENTAGES[settings.zoomIndex] ?? 1) * 100,
+          )}
+          % (press Z)
+        </p>
       </section>
     </aside>
   );

@@ -5,6 +5,7 @@ import {
   findReceiverPtpIndex,
   findTriggerPtpIndex,
 } from "../lib/picker";
+import { ZOOM_PERCENTAGES } from "../types";
 import type {
   DisplayWaveform,
   PickAxis,
@@ -21,6 +22,8 @@ type Props = {
   peakWidthUs: number;
   /** Sample interval of the displayed waveform, in µs. */
   dTUs: number;
+  /** Index into ZOOM_PERCENTAGES; the visible x-range shrinks accordingly. */
+  zoomIndex: number;
 };
 
 /**
@@ -36,6 +39,7 @@ export default function WaveformChart({
   onPick,
   peakWidthUs,
   dTUs,
+  zoomIndex,
 }: Props) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const receiverRef = useRef<HTMLDivElement>(null);
@@ -67,7 +71,12 @@ export default function WaveformChart({
     const time = display.timeUs;
     // x-axis span equals the trimmed time range of the current display.
     const xMin = time[0];
-    const xMax = time[time.length - 1];
+    // Zoom keeps the left boundary fixed and only shrinks the right one.
+    // Unknown / out-of-range zoomIndex falls back to 100% (full range).
+    const ratio =
+      ZOOM_PERCENTAGES[zoomIndex] ?? ZOOM_PERCENTAGES[0];
+    const fullSpan = time[time.length - 1] - xMin;
+    const xMax = xMin + fullSpan * ratio;
 
     // uPlot.AlignedData: first array is the shared x-axis, later arrays
     // are the y values per series.
@@ -129,7 +138,7 @@ export default function WaveformChart({
       destroyPlots(triggerPlotRef, triggerRef);
       destroyPlots(receiverPlotRef, receiverRef);
     };
-  }, [display, picker]);
+  }, [display, picker, zoomIndex]);
 
   /**
    * Attach mousedown + contextmenu listeners to the uPlot overlay div

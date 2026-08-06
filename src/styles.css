@@ -209,6 +209,69 @@ body,
   border-radius: 4px;
 }
 
+.zoom-label {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  background: #f5f6f8;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.notification-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notification-heading {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.notification-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.notification-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.notification-item {
+  word-break: break-word;
+}
+
+.notification-info {
+  color: var(--text);
+}
+
+.notification-success {
+  color: #1d6f1d;
+}
+
+.notification-cancel {
+  color: #8a5a00;
+}
+
+.notification-warning {
+  color: #8a5a00;
+}
+
+.notification-error {
+  color: var(--danger);
+}
+
 @media (max-width: 760px) {
   .app-main {
     grid-template-columns: 1fr;
