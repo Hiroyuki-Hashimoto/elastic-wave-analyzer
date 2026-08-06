@@ -344,6 +344,17 @@ body,
   gap: 8px;
 }
 
+.export-toggle-on {
+  background: #2ca02c;
+  border-color: #2ca02c;
+}
+
+.export-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .notification-panel {
   display: flex;
   flex-direction: column;

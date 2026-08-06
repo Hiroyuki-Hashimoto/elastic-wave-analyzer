@@ -61,6 +61,8 @@ export default function App() {
   const queueIdRef = useRef(0);
   // Imperative handle into the chart for PNG export.
   const chartHandleRef = useRef<WaveformChartHandle | null>(null);
+  // When true, Enter-confirm also auto-downloads the current chart as PNG.
+  const [autoDownloadPng, setAutoDownloadPng] = useState(false);
 
   // The current entry is the single 'current' row in the queue, or null.
   const currentEntry = useMemo(
@@ -283,6 +285,67 @@ export default function App() {
     [currentRaw],
   );
 
+  /**
+   * Trigger the all-results CSV download. Disabled when there is nothing
+   * to export, so the user never gets an empty file.
+   */
+  const handleDownloadCsv = useCallback(() => {
+    if (results.length === 0) return;
+    try {
+      downloadResultsCsv(results);
+      addNotice("info", `Downloaded ${results.length} result(s) as CSV.`);
+    } catch (e) {
+      addNotice(
+        "error",
+        `CSV export failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }, [results, addNotice]);
+
+  /**
+   * Capture the current chart canvases (Trigger + Receiver) and save
+   * them as a single PNG. Used by the auto-PNG-on-confirm flow that
+   * fires when the toggle is armed at Enter time.
+   */
+  const capturePng = useCallback(
+    (source: "auto" | "manual"): boolean => {
+      const handle = chartHandleRef.current;
+      const entry = currentEntry;
+      if (!handle || !entry) return false;
+      const { trigger, receiver } = handle.getCanvases();
+      if (!trigger || !receiver) return false;
+      try {
+        // Force a redraw so the export reflects the latest picker state
+        // and any pending uPlot internal rendering.
+        handle.redraw();
+        exportChartPng(trigger, receiver, entry.fileName);
+        addNotice(
+          "info",
+          `Saved chart as ${entry.fileName.replace(/\.csv$/i, "")}.png (${source}).`,
+        );
+        return true;
+      } catch (e) {
+        addNotice(
+          "error",
+          `PNG export failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        return false;
+      }
+    },
+    [addNotice, currentEntry],
+  );
+
+  /**
+   * Flip the auto-PNG-on-confirm toggle. The actual PNG capture only
+   * happens during Enter-confirm; this button just arms the flag.
+   */
+  const handleToggleAutoDownloadPng = useCallback(() => {
+    setAutoDownloadPng((prev) => {
+      addNotice("info", `PNG auto-save: ${prev ? "OFF" : "ON"}`);
+      return !prev;
+    });
+  }, [addNotice]);
+
   // Global keyboard handler: Enter / Escape / Z.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -312,6 +375,10 @@ export default function App() {
         );
         const msg = buildConfirmMessage(currentRaw.fileName, result);
         if (msg) addNotice("success", msg);
+        // Auto-PNG: snapshot the current chart when the toggle is on.
+        if (autoDownloadPng) {
+          capturePng("auto");
+        }
         advanceQueue("confirmed");
       } else if (e.key === "Escape") {
         if (!currentRaw) return;
@@ -329,63 +396,12 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [currentRaw, picker, recordResult, advanceQueue, addNotice]);
+  }, [currentRaw, picker, recordResult, advanceQueue, addNotice, autoDownloadPng, capturePng]);
 
   // Display label for the current file in the progress header.
   const currentIndex = currentEntry
     ? queue.findIndex((e) => e.id === currentEntry.id) + 1
     : 0;
-
-  /**
-   * Trigger the all-results CSV download. Disabled when there is nothing
-   * to export, so the user never gets an empty file.
-   */
-  const handleDownloadCsv = useCallback(() => {
-    if (results.length === 0) return;
-    try {
-      downloadResultsCsv(results);
-      addNotice("info", `Downloaded ${results.length} result(s) as CSV.`);
-    } catch (e) {
-      addNotice(
-        "error",
-        `CSV export failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-  }, [results, addNotice]);
-
-  /**
-   * Capture the current chart canvases (Trigger + Receiver) and save
-   * them as a single PNG. The chart is redrawn first so the export
-   * reflects the latest visible state including any STS/PTP markers.
-   */
-  const handleDownloadPng = useCallback(() => {
-    const handle = chartHandleRef.current;
-    if (!handle) {
-      addNotice("warning", "PNG export is unavailable: no chart to capture.");
-      return;
-    }
-    const { trigger, receiver } = handle.getCanvases();
-    if (!trigger || !receiver) {
-      addNotice("warning", "PNG export is unavailable: no chart to capture.");
-      return;
-    }
-    if (!currentEntry) return;
-    try {
-      // Force a redraw so the export reflects the latest picker state
-      // and any pending uPlot internal rendering.
-      handle.redraw();
-      exportChartPng(trigger, receiver, currentEntry.fileName);
-      addNotice(
-        "info",
-        `Saved chart as ${currentEntry.fileName.replace(/\.csv$/i, "")}.png.`,
-      );
-    } catch (e) {
-      addNotice(
-        "error",
-        `PNG export failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-  }, [addNotice, currentEntry]);
 
   return (
     <div className="app-shell">
@@ -435,8 +451,9 @@ export default function App() {
           <ExportPanel
             canExport={results.length > 0}
             canExportPng={currentRaw !== null}
+            autoDownloadPng={autoDownloadPng}
             onDownloadCsv={handleDownloadCsv}
-            onDownloadPng={handleDownloadPng}
+            onToggleAutoDownloadPng={handleToggleAutoDownloadPng}
           />
 
           <NotificationPanel notices={notices} />
