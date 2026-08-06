@@ -1,5 +1,35 @@
 # AGENTS.md
 
+## Persistent development rules
+
+- Read this AGENTS.md before making changes.
+- Keep the repository private until the user explicitly requests public release.
+- Do not run git push unless the user explicitly asks.
+- Commit each completed, independently verifiable feature as a separate commit.
+- Before every commit, run npm run build and report the result.
+- Stop after each planned implementation step and wait for user approval before starting the next step.
+- Keep all user-facing UI text in English.
+- Process CSV files entirely in the browser; do not send waveform data to external services.
+- Do not add a backend, database, authentication, routing, global state library, UI component library, or CSS framework unless explicitly requested.
+- Keep React components few and small; place waveform-processing logic in src/lib.
+- Maintain the three-module boundary:
+  - src/lib/waveform.ts: CSV parsing, validation, units, gain, offset, trim
+  - src/lib/picker.ts: STS/PTP picking and related calculations
+  - src/lib/exporter.ts: CSV and PNG export
+
+## Code comment rules
+
+- Write all comments in English.
+- Add a 1–3 line comment at the top of each function describing its purpose.
+- Add a 1-line inline comment for:
+  - Branch/loop conditions (explain the intent)
+  - Numeric calculations and unit conversions (explain the formula and units)
+  - Library-specific APIs such as uPlot calls
+- Do not comment obvious assignments or standard React/TypeScript syntax.
+- Prefer explaining *why* over *what* when the code is self-explanatory.
+- Keep comments concise (one line where possible, two lines maximum per block).
+- Do not leave commented-out code in the final commit.
+
 ## Git Commit Rules
 
 All commits MUST follow this format, written entirely in English:
