@@ -37,53 +37,81 @@ export function findNearestSampleIndex(
 }
 
 /**
- * Find the Trigger PTP index: the global maximum of the displayed
- * Trigger waveform. Returns -1 for empty input.
+ * Find the Trigger PTP index using a µs-width window-peak search.
+ * The first index i where values[i] is the maximum over the window
+ * [i - W/2, i + W/2] (clamped to array bounds) is returned. W in
+ * samples is derived from peakWidthUs (µs) and the per-file dT (µs).
+ * Returns -1 for empty input.
  */
-export function findTriggerPtpIndex(values: number[]): number {
+export function findTriggerPtpIndex(
+  values: number[],
+  peakWidthUs: number,
+  dTUs: number,
+): number {
   if (!Array.isArray(values) || values.length === 0) return -1;
-  let best = 0;
-  let bestVal = values[0];
-  for (let i = 1; i < values.length; i++) {
-    // Strictly greater keeps the earliest index on ties (stable pick).
-    if (values[i] > bestVal) {
-      bestVal = values[i];
-      best = i;
-    }
+  // Half-width in samples, clamped to at least 1 so the search window
+  // is non-empty even when peakWidthUs is 0 or smaller than dT.
+  const halfW = windowHalfSamples(peakWidthUs, dTUs);
+  for (let i = 0; i < values.length; i++) {
+    if (isMaxInWindow(values, i, halfW)) return i;
   }
-  return best;
+  return values.length - 1;
 }
 
 /**
- * Find the Receiver PTP index: the dominant positive peak of the
- * displayed Receiver waveform at or after stsIndex. Returns -1 on
- * invalid input and falls back to stsIndex at the array tail.
- *
- * Implemented as the argmax of values[stsIndex:]. A prominence-threshold
- * heuristic was considered but is fragile: when the post-STS tail spans
- * both a deep trough and a tall peak, the threshold can turn negative
- * and admit one-sample noise. The argmax of the tail is simpler and
- * picks the strongest positive peak regardless of noise amplitude.
+ * Find the Receiver PTP index using a µs-width window-peak search,
+ * restricted to the region at or after stsIndex. Same window rule
+ * as findTriggerPtpIndex. Returns -1 on invalid input and falls
+ * back to stsIndex at the array tail.
  */
 export function findReceiverPtpIndex(
   values: number[],
   stsIndex: number,
+  peakWidthUs: number,
+  dTUs: number,
 ): number {
   if (!Array.isArray(values) || values.length === 0) return -1;
   if (stsIndex < 0 || stsIndex >= values.length) return -1;
   // At the tail there is no later sample to form a peak; fall back.
   if (stsIndex >= values.length - 1) return stsIndex;
 
-  let best = stsIndex;
-  let bestVal = values[stsIndex];
-  for (let i = stsIndex + 1; i < values.length; i++) {
-    // Strictly greater keeps the earliest index on ties (stable pick).
-    if (values[i] > bestVal) {
-      bestVal = values[i];
-      best = i;
-    }
+  const halfW = windowHalfSamples(peakWidthUs, dTUs);
+  for (let i = stsIndex; i < values.length; i++) {
+    if (isMaxInWindow(values, i, halfW)) return i;
   }
-  return best;
+  // No window-peak found (flat data): fall back to the STS index.
+  return stsIndex;
+}
+
+/**
+ * Convert a µs window half-width into sample count using the per-file
+ * sample interval dTUs. Rounded to the nearest sample and clamped to
+ * at least 1 so the search always covers a non-empty range.
+ */
+function windowHalfSamples(peakWidthUs: number, dTUs: number): number {
+  if (!Number.isFinite(dTUs) || dTUs <= 0) return 1;
+  if (!Number.isFinite(peakWidthUs) || peakWidthUs <= 0) return 1;
+  return Math.max(1, Math.round(peakWidthUs / dTUs));
+}
+
+/**
+ * Return true when values[i] is the (strict) maximum over the
+ * half-width `halfW` window [i - halfW, i + halfW] clamped to bounds.
+ * Strict > comparison: a tie is NOT a window peak, so the first
+ * unique apex wins while equal-value plateaus are skipped.
+ */
+function isMaxInWindow(
+  values: number[],
+  i: number,
+  halfW: number,
+): boolean {
+  const lo = Math.max(0, i - halfW);
+  const hi = Math.min(values.length - 1, i + halfW);
+  const v = values[i];
+  for (let j = lo; j <= hi; j++) {
+    if (values[j] > v) return false;
+  }
+  return true;
 }
 
 /**

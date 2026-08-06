@@ -17,6 +17,10 @@ type Props = {
   display: DisplayWaveform | null;
   picker: PickerState;
   onPick: (axis: PickAxis, kind: PickKind, point: PickPoint) => void;
+  /** Half-width of the PTP peak search window, in µs. */
+  peakWidthUs: number;
+  /** Sample interval of the displayed waveform, in µs. */
+  dTUs: number;
 };
 
 /**
@@ -26,7 +30,13 @@ type Props = {
  * are destroyed on unmount and before each rebuild; click and context
  * listeners are removed on the same lifecycle to avoid leaks.
  */
-export default function WaveformChart({ display, picker, onPick }: Props) {
+export default function WaveformChart({
+  display,
+  picker,
+  onPick,
+  peakWidthUs,
+  dTUs,
+}: Props) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const receiverRef = useRef<HTMLDivElement>(null);
   const triggerPlotRef = useRef<UPlot | null>(null);
@@ -40,6 +50,10 @@ export default function WaveformChart({ display, picker, onPick }: Props) {
   displayRef.current = display;
   const onPickRef = useRef(onPick);
   onPickRef.current = onPick;
+  const peakWidthUsRef = useRef(peakWidthUs);
+  peakWidthUsRef.current = peakWidthUs;
+  const dTUsRef = useRef(dTUs);
+  dTUsRef.current = dTUs;
 
   // (Re)build the plots whenever display data OR picker markers change.
   useEffect(() => {
@@ -180,24 +194,23 @@ export default function WaveformChart({ display, picker, onPick }: Props) {
       // Left-click: snap STS to nearest sample, then auto-derive PTP.
       const stsIdx = findNearestSampleIndex(time, dataX);
       emit(stsIdx, "sts");
-      // Trigger PTP = argmax over the whole displayed Trigger; Receiver
-      // PTP = argmax over values[stsIdx:], auto-derived from this STS.
+      // PTP uses the µs-width window peak with the current sample dT.
       if (axis === "trigger") {
-        emit(findTriggerPtpIndex(values), "ptp");
+        emit(findTriggerPtpIndex(values, peakWidthUsRef.current, dTUsRef.current), "ptp");
       } else {
-        emit(findReceiverPtpIndex(values, stsIdx), "ptp");
+        emit(findReceiverPtpIndex(values, stsIdx, peakWidthUsRef.current, dTUsRef.current), "ptp");
       }
     } else {
       // Right-click: replace only PTP on this axis.
       if (axis === "trigger") {
-        emit(findTriggerPtpIndex(values), "ptp");
+        emit(findTriggerPtpIndex(values, peakWidthUsRef.current, dTUsRef.current), "ptp");
       } else {
         // Use already-selected Receiver STS; on missing STS fall back to
         // the click's nearest sample as the search start.
         const stsIdx =
           pickerRef.current.receiverSts?.index ??
           findNearestSampleIndex(time, dataX);
-        emit(findReceiverPtpIndex(values, stsIdx), "ptp");
+        emit(findReceiverPtpIndex(values, stsIdx, peakWidthUsRef.current, dTUsRef.current), "ptp");
       }
     }
   }

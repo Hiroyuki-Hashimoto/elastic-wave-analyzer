@@ -138,10 +138,15 @@ export default function App() {
         <section className="chart-area">
           {/* Show chart only when a file is loaded and a valid display exists. */}
           {raw && chartDisplay ? (
+            // Placeholders (0) are filled in with real values in the
+            // upcoming wiring commit; the picker functions are tolerant
+            // of zero dT and zero peakWidthUs (window clamps to 1 sample).
             <WaveformChart
               display={chartDisplay}
               picker={picker}
               onPick={handlePick}
+              peakWidthUs={0}
+              dTUs={0}
             />
           ) : (
             <div className="empty-state">
