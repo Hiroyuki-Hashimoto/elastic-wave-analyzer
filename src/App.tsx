@@ -42,6 +42,10 @@ export default function App() {
   const [chartDisplay, setChartDisplay] = useState<DisplayWaveform | null>(
     null,
   );
+  // Per-file sample interval in µs, derived from chartDisplay.timeUs.
+  // Held alongside the display so future modules (e.g. LPF) can reuse
+  // the same precomputed value without re-scanning the array.
+  const [dTUs, setDrtUs] = useState<number | null>(null);
 
   // Re-derive the display waveform whenever the file or settings change.
   useEffect(() => {
@@ -49,6 +53,7 @@ export default function App() {
     if (!raw) {
       goodDisplayRef.current = null;
       setChartDisplay(null);
+      setDrtUs(null);
       return;
     }
     // Invalid trim range: keep the existing chart; surface error in panel.
@@ -58,6 +63,7 @@ export default function App() {
     const next = buildDisplayWaveform(raw, settings);
     goodDisplayRef.current = next;
     setChartDisplay(next);
+    setDrtUs(estimateSampleIntervalUs(next.timeUs));
   }, [raw, settings, trimError]);
 
   // Combine parse errors with the current trim error (if any) for display.
@@ -138,15 +144,12 @@ export default function App() {
         <section className="chart-area">
           {/* Show chart only when a file is loaded and a valid display exists. */}
           {raw && chartDisplay ? (
-            // Placeholders (0) are filled in with real values in the
-            // upcoming wiring commit; the picker functions are tolerant
-            // of zero dT and zero peakWidthUs (window clamps to 1 sample).
             <WaveformChart
               display={chartDisplay}
               picker={picker}
               onPick={handlePick}
-              peakWidthUs={0}
-              dTUs={0}
+              peakWidthUs={settings.peakWidthUs}
+              dTUs={dTUs ?? 0}
             />
           ) : (
             <div className="empty-state">
@@ -157,4 +160,27 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+/**
+ * Estimate the per-sample time interval of a sorted microsecond array
+ * as the median of its adjacent differences. Median is robust to a few
+ * out-of-order or irregular samples that the mean would skew. Returns
+ * null when the array has fewer than two points or no positive diff.
+ */
+function estimateSampleIntervalUs(timeUs: number[]): number | null {
+  if (timeUs.length < 2) return null;
+  const diffs: number[] = [];
+  for (let i = 1; i < timeUs.length; i++) {
+    const d = timeUs[i] - timeUs[i - 1];
+    if (Number.isFinite(d) && d > 0) diffs.push(d);
+  }
+  if (diffs.length === 0) return null;
+  diffs.sort((a, b) => a - b);
+  const mid = diffs.length >> 1;
+  // Length-odd picks the exact middle; length-even averages the two
+  // middle values for a smoother estimate across even sample counts.
+  return diffs.length % 2 === 1
+    ? diffs[mid]
+    : (diffs[mid - 1] + diffs[mid]) / 2;
 }
