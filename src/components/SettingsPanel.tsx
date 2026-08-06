@@ -5,8 +5,8 @@ import type { DisplaySettings } from "../types";
 type Props = {
   settings: DisplaySettings;
   onSettingsChange: (next: DisplaySettings) => void;
-  onSelectFile: (file: File) => void;
-  onDropFile: (file: File) => void;
+  onSelectFiles: (files: File[]) => void;
+  onDropFiles: (files: File[]) => void;
   errors: string[];
   fileName: string | null;
   /** Number of results accumulated (confirmed + canceled) so far. */
@@ -21,8 +21,8 @@ type Props = {
 export default function SettingsPanel({
   settings,
   onSettingsChange,
-  onSelectFile,
-  onDropFile,
+  onSelectFiles,
+  onDropFiles,
   errors,
   fileName,
   resultCount,
@@ -44,21 +44,24 @@ export default function SettingsPanel({
           className="file-button"
           onClick={() => fileInputRef.current?.click()}
         >
-          Select CSV file
+          Select CSV file(s)
         </button>
         <input
           ref={fileInputRef}
           type="file"
           accept=".csv,text/csv"
+          multiple
           className="file-input-hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onSelectFile(f);
+            const list = e.target.files;
+            if (list && list.length > 0) {
+              onSelectFiles(Array.from(list));
+            }
             // Reset value so selecting the same file twice still fires.
             e.target.value = "";
           }}
         />
-        {/* Dropzone: accept drag-and-drop of a single CSV file. */}
+        {/* Dropzone: accept drag-and-drop of one or more CSV files. */}
         <div
           className="dropzone"
           onDragOver={(e) => {
@@ -67,11 +70,13 @@ export default function SettingsPanel({
           }}
           onDrop={(e) => {
             e.preventDefault();
-            const f = e.dataTransfer.files?.[0];
-            if (f) onDropFile(f);
+            const list = e.dataTransfer.files;
+            if (list && list.length > 0) {
+              onDropFiles(Array.from(list));
+            }
           }}
         >
-          Drop a CSV file here
+          Drop CSV file(s) here
         </div>
       </section>
 

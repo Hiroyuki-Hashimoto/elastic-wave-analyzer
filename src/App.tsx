@@ -23,13 +23,23 @@ import {
   type RawWaveform,
 } from "./types";
 
+/** A single entry in the analysis queue. raw is null when the file failed to parse. */
+type QueueEntry = {
+  /** Monotonic id so React keys stay stable across edits. */
+  id: number;
+  fileName: string;
+  raw: RawWaveform | null;
+  status: "current" | "pending" | "confirmed" | "canceled" | "invalid";
+  errorMessage: string | null;
+};
+
 /**
- * App holds all Phase 0–2 state: the loaded waveform, display settings,
- * the active picker state, processed results, and the notification log.
- * No global state library is used; everything lives in this component.
+ * App holds all Phase 0–2 state: the loaded waveform queue, display
+ * settings, the active picker state, processed results, and the
+ * notification log. No global state library is used.
  */
 export default function App() {
-  const [raw, setRaw] = useState<RawWaveform | null>(null);
+  const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [settings, setSettings] = useState<DisplaySettings>(
     DEFAULT_DISPLAY_SETTINGS,
   );
@@ -43,6 +53,15 @@ export default function App() {
   // Monotonic counter so each notice gets a unique key for React.
   const noticeIdRef = useRef(0);
   const [notices, setNotices] = useState<Notice[]>([]);
+  // Monotonic counter for stable queue keys.
+  const queueIdRef = useRef(0);
+
+  // The current entry is the single 'current' row in the queue, or null.
+  const currentEntry = useMemo(
+    () => queue.find((e) => e.status === "current") ?? null,
+    [queue],
+  );
+  const currentRaw = currentEntry?.raw ?? null;
 
   const trimError = useMemo(() => validateTrim(settings), [settings]);
 
@@ -57,10 +76,10 @@ export default function App() {
   // the same precomputed value without re-scanning the array.
   const [dTUs, setDrtUs] = useState<number | null>(null);
 
-  // Re-derive the display waveform whenever the file or settings change.
+  // Re-derive the display waveform whenever the current file or settings change.
   useEffect(() => {
     // No file loaded: clear any cached good display and hide the chart.
-    if (!raw) {
+    if (!currentRaw) {
       goodDisplayRef.current = null;
       setChartDisplay(null);
       setDrtUs(null);
@@ -70,11 +89,11 @@ export default function App() {
     if (trimError) {
       return;
     }
-    const next = buildDisplayWaveform(raw, settings);
+    const next = buildDisplayWaveform(currentRaw, settings);
     goodDisplayRef.current = next;
     setChartDisplay(next);
     setDrtUs(estimateSampleIntervalUs(next.timeUs));
-  }, [raw, settings, trimError]);
+  }, [currentRaw, settings, trimError]);
 
   // Combine parse errors with the current trim error (if any) for display.
   const effectiveErrors = useMemo(() => {
@@ -96,35 +115,126 @@ export default function App() {
   }, []);
 
   /**
-   * Handle a user-selected or dropped file: validate extension, read,
-   * parse, and either store the RawWaveform or surface an English error.
+   * Parse one file into a queue entry, recording either a parsed raw
+   * waveform or a parse error. The file is NOT added to the queue when
+   * it is unsupported (wrong extension / MIME).
    */
-  const handleFile = async (file: File) => {
-    // Clear previous file-level errors when starting a new load.
-    setErrors([]);
-    // Reject anything that is not a .csv file (by name or MIME).
-    if (!/\.csv$/i.test(file.name) && file.type !== "text/csv") {
-      setErrors([
-        "Unsupported CSV format. Expected: Time [s], Transmitter [V], Receiver [V].",
-      ]);
-      setRaw(null);
-      addNotice("error", `Unsupported file: ${file.name}`);
-      return;
-    }
-    try {
-      const parsed = await readCsvFile(file);
-      setRaw(parsed);
-      // Reset picker state for a brand-new file: no inherited picks.
+  const parseFileToEntry = useCallback(
+    async (file: File): Promise<QueueEntry | null> => {
+      if (!/\.csv$/i.test(file.name) && file.type !== "text/csv") {
+        addNotice("error", `Unsupported file: ${file.name}`);
+        return null;
+      }
+      queueIdRef.current += 1;
+      const id = queueIdRef.current;
+      try {
+        const parsed = await readCsvFile(file);
+        addNotice(
+          "info",
+          `Loaded ${file.name} (${parsed.timeUs.length} samples).`,
+        );
+        return {
+          id,
+          fileName: file.name,
+          raw: parsed,
+          status: "pending",
+          errorMessage: null,
+        };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        addNotice("error", `${file.name}: ${msg}`);
+        return {
+          id,
+          fileName: file.name,
+          raw: null,
+          status: "invalid",
+          errorMessage: msg,
+        };
+      }
+    },
+    [addNotice],
+  );
+
+  /**
+   * Advance the queue after Enter or Escape: mark the current entry as
+   * confirmed/canceled, then promote the first remaining pending entry
+   * to current. When no more entries remain, post an "All files
+   * processed" notice. The picker is reset for the next file.
+   */
+  const advanceQueue = useCallback(
+    (lastStatus: "confirmed" | "canceled") => {
+      // Compute the new queue synchronously so the notice text can read
+      // the new current file's name without relying on setState callback
+      // return values to flow outside the callback.
+      const current = queue.find((e) => e.status === "current");
+      if (!current) return;
+      let nextQueue = queue.map<QueueEntry>((e) =>
+        e.status === "current" ? { ...e, status: lastStatus } : e,
+      );
+      const nextIdx = nextQueue.findIndex(
+        (e) => e.status === "pending" || e.status === "invalid",
+      );
+      let nextCurrent: QueueEntry | null = null;
+      if (nextIdx !== -1) {
+        const promoted: QueueEntry = {
+          ...nextQueue[nextIdx],
+          status: "current",
+        };
+        nextCurrent = promoted;
+        nextQueue = nextQueue.slice();
+        nextQueue[nextIdx] = promoted;
+      }
+      setQueue(nextQueue);
+      // Reset picker for the next file.
       setPicker(emptyPickerState());
-      addNotice("info", `Loaded ${file.name} (${parsed.timeUs.length} samples).`);
-    } catch (e) {
-      // On parse failure, drop the waveform and show the parser error.
-      setRaw(null);
-      const msg = e instanceof Error ? e.message : String(e);
-      setErrors([msg]);
-      addNotice("error", `${file.name}: ${msg}`);
-    }
-  };
+      if (nextCurrent) {
+        addNotice("info", `Now processing: ${nextCurrent.fileName}`);
+      } else {
+        addNotice(
+          "success",
+          "All files processed. You can download the results CSV.",
+        );
+      }
+    },
+    [addNotice, queue],
+  );
+
+  /**
+   * Handle user-selected or dropped files. Replaces the current queue
+   * (single file behavior) or appends to it (multi-file behavior). The
+   * first valid file becomes the current entry immediately.
+   */
+  const handleFiles = useCallback(
+    async (fileList: FileList | File[]) => {
+      const files = Array.from(fileList);
+      if (files.length === 0) return;
+      // Clear previous file-level errors when starting a new load.
+      setErrors([]);
+      const entries: QueueEntry[] = [];
+      for (const f of files) {
+        // eslint-disable-next-line no-await-in-loop
+        const entry = await parseFileToEntry(f);
+        if (entry) entries.push(entry);
+      }
+      if (entries.length === 0) return;
+      // First valid entry becomes current; the rest stay pending.
+      // Loading a fresh batch replaces any previous queue.
+      const [first, ...rest] = entries;
+      setQueue([
+        { ...first, status: "current" },
+        ...rest.map((e) => ({ ...e })),
+      ]);
+      // Reset picker for the new file (settings are kept across files).
+      setPicker(emptyPickerState());
+      if (entries.length > 1) {
+        addNotice(
+          "info",
+          `Queued ${entries.length} files. Starting with ${first.fileName}.`,
+        );
+      }
+    },
+    [addNotice, parseFileToEntry],
+  );
 
   /**
    * Receive a STS/PTP click from the chart. Replacing a pick on an axis
@@ -152,42 +262,20 @@ export default function App() {
 
   /**
    * Append a confirmed (Enter) or canceled (Escape) result to the results
-   * collection. For a confirmed result the picker must have all four
-   * picks; for canceled we synthesize an AnalysisResult whose pick
-   * fields are all null but the file name is preserved.
+   * collection. The picker flags are set so pickerToAnalysisResult fills
+   * pick fields only when confirmed.
    */
   const recordResult = useCallback(
     (pickerSnapshot: PickerState, confirmed: boolean) => {
-      if (!raw) return;
+      if (!currentRaw) return;
       const stateForResult: PickerState = confirmed
         ? { ...pickerSnapshot, isConfirmed: true, isCanceled: false }
         : { ...pickerSnapshot, isConfirmed: false, isCanceled: true };
-      const result = pickerToAnalysisResult(stateForResult, raw.fileName);
+      const result = pickerToAnalysisResult(stateForResult, currentRaw.fileName);
       setResults((prev) => [...prev, result]);
     },
-    [raw],
+    [currentRaw],
   );
-
-  /**
-   * Build the success message shown in the notice log when Enter confirms
-   * a full set of picks. Returns null if any required pick is missing.
-   */
-  const buildConfirmMessage = (
-    fileName: string,
-    result: AnalysisResult,
-  ): string | null => {
-    if (
-      result.stsDeltaTUs === null ||
-      result.ptpDeltaTUs === null
-    ) {
-      return null;
-    }
-    return (
-      `Analysis confirmed for ${fileName}. ` +
-      `STS_deltaT=${result.stsDeltaTUs.toFixed(1)} us, ` +
-      `PTP_deltaT=${result.ptpDeltaTUs.toFixed(1)} us.`
-    );
-  };
 
   // Global keyboard handler: Enter / Escape / Z.
   useEffect(() => {
@@ -198,7 +286,7 @@ export default function App() {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       if (e.key === "Enter") {
-        if (!raw) return;
+        if (!currentRaw) return;
         const allPicks =
           picker.triggerSts &&
           picker.triggerPtp &&
@@ -214,16 +302,16 @@ export default function App() {
         recordResult(picker, true);
         const result = pickerToAnalysisResult(
           { ...picker, isConfirmed: true, isCanceled: false },
-          raw.fileName,
+          currentRaw.fileName,
         );
-        const msg = buildConfirmMessage(raw.fileName, result);
+        const msg = buildConfirmMessage(currentRaw.fileName, result);
         if (msg) addNotice("success", msg);
-        setPicker(emptyPickerState());
+        advanceQueue("confirmed");
       } else if (e.key === "Escape") {
-        if (!raw) return;
+        if (!currentRaw) return;
         recordResult(picker, false);
-        addNotice("cancel", `Analysis canceled for ${raw.fileName}.`);
-        setPicker(emptyPickerState());
+        addNotice("cancel", `Analysis canceled for ${currentRaw.fileName}.`);
+        advanceQueue("canceled");
       } else if (e.key === "z" || e.key === "Z") {
         // Cycle through the seven zoom levels, wrapping back to 100%.
         setSettings((prev) => {
@@ -235,7 +323,12 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [raw, picker, recordResult, addNotice]);
+  }, [currentRaw, picker, recordResult, advanceQueue, addNotice]);
+
+  // Display label for the current file in the progress header.
+  const currentIndex = currentEntry
+    ? queue.findIndex((e) => e.id === currentEntry.id) + 1
+    : 0;
 
   return (
     <div className="app-shell">
@@ -248,16 +341,23 @@ export default function App() {
         <SettingsPanel
           settings={settings}
           onSettingsChange={setSettings}
-          onSelectFile={handleFile}
-          onDropFile={handleFile}
+          onSelectFiles={handleFiles}
+          onDropFiles={handleFiles}
           errors={effectiveErrors}
-          fileName={raw?.fileName ?? null}
+          fileName={currentEntry?.fileName ?? null}
           resultCount={results.length}
         />
 
         <section className="chart-area">
+          {/* Progress line above the chart. */}
+          {queue.length > 0 && currentEntry ? (
+            <p className="progress-label">
+              File {currentIndex} of {queue.length}: {currentEntry.fileName}
+            </p>
+          ) : null}
+
           {/* Show chart only when a file is loaded and a valid display exists. */}
-          {raw && chartDisplay ? (
+          {currentRaw && chartDisplay ? (
             <WaveformChart
               display={chartDisplay}
               picker={picker}
@@ -272,10 +372,77 @@ export default function App() {
             </div>
           )}
 
+          <QueueList queue={queue} />
+
           <NotificationPanel notices={notices} />
         </section>
       </main>
     </div>
+  );
+}
+
+/**
+ * Small list that shows the file queue with per-row status, matching
+ * the spec's "current / confirmed / canceled / pending" terminology.
+ */
+function QueueList({ queue }: { queue: QueueEntry[] }) {
+  if (queue.length === 0) return null;
+  return (
+    <section className="queue-list">
+      <h3 className="queue-heading">File queue</h3>
+      <ul className="queue-items">
+        {queue.map((e) => {
+          const statusText = statusLabel(e.status);
+          return (
+            <li
+              key={e.id}
+              className={`queue-item queue-${e.status}`}
+              title={e.errorMessage ?? undefined}
+            >
+              <span className="queue-name">{e.fileName}</span>
+              <span className="queue-status">{statusText}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function statusLabel(s: QueueEntry["status"]): string {
+  switch (s) {
+    case "current":
+      return "Current";
+    case "confirmed":
+      return "Confirmed";
+    case "canceled":
+      return "Canceled";
+    case "invalid":
+      return "Invalid";
+    case "pending":
+    default:
+      return "Pending";
+  }
+}
+
+/**
+ * Build the success message shown in the notice log when Enter confirms
+ * a full set of picks. Returns null if any required pick is missing.
+ */
+function buildConfirmMessage(
+  fileName: string,
+  result: AnalysisResult,
+): string | null {
+  if (
+    result.stsDeltaTUs === null ||
+    result.ptpDeltaTUs === null
+  ) {
+    return null;
+  }
+  return (
+    `Analysis confirmed for ${fileName}. ` +
+    `STS_deltaT=${result.stsDeltaTUs.toFixed(1)} us, ` +
+    `PTP_deltaT=${result.ptpDeltaTUs.toFixed(1)} us.`
   );
 }
 
