@@ -189,8 +189,9 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
   /**
    * Convert a mouse click into snapped PickPoint(s) and forward them
    * to App via onPick. A left-click sets STS AND auto-derives the PTP
-   * for the same axis (Trigger uses global argmax, Receiver uses
-   * argmax of values[stsIdx:]); a right-click only replaces the PTP.
+   * for the same axis; a right-click forces the PTP to the clicked
+   * sample so the user can override the automatic peak detection on
+   * noisy data.
    */
   function handlePickClick(
     axis: PickAxis,
@@ -234,17 +235,11 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
         emit(findReceiverPtpIndex(values, stsIdx, peakWidthUsRef.current, dTUsRef.current), "ptp");
       }
     } else {
-      // Right-click: replace only PTP on this axis.
-      if (axis === "trigger") {
-        emit(findTriggerPtpIndex(values, peakWidthUsRef.current, dTUsRef.current), "ptp");
-      } else {
-        // Use already-selected Receiver STS; on missing STS fall back to
-        // the click's nearest sample as the search start.
-        const stsIdx =
-          pickerRef.current.receiverSts?.index ??
-          findNearestSampleIndex(time, dataX);
-        emit(findReceiverPtpIndex(values, stsIdx, peakWidthUsRef.current, dTUsRef.current), "ptp");
-      }
+      // Right-click: force the PTP to the click's nearest sample. This
+      // lets the user override the automatic window-peak detection on
+      // noisy data where the algorithm's choice is wrong.
+      const ptpIdx = findNearestSampleIndex(time, dataX);
+      emit(ptpIdx, "ptp");
     }
   }
 
