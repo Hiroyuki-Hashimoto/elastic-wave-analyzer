@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ExportPanel from "./components/ExportPanel";
 import NotificationPanel from "./components/NotificationPanel";
 import SettingsPanel from "./components/SettingsPanel";
-import WaveformChart from "./components/WaveformChart";
+import WaveformChart, {
+  type WaveformChartHandle,
+} from "./components/WaveformChart";
 import { emptyPickerState, pickerToAnalysisResult } from "./lib/picker";
-import { downloadResultsCsv } from "./lib/exporter";
+import { downloadResultsCsv, exportChartPng } from "./lib/exporter";
 import {
   buildDisplayWaveform,
   readCsvFile,
@@ -57,6 +59,8 @@ export default function App() {
   const [notices, setNotices] = useState<Notice[]>([]);
   // Monotonic counter for stable queue keys.
   const queueIdRef = useRef(0);
+  // Imperative handle into the chart for PNG export.
+  const chartHandleRef = useRef<WaveformChartHandle | null>(null);
 
   // The current entry is the single 'current' row in the queue, or null.
   const currentEntry = useMemo(
@@ -349,6 +353,40 @@ export default function App() {
     }
   }, [results, addNotice]);
 
+  /**
+   * Capture the current chart canvases (Trigger + Receiver) and save
+   * them as a single PNG. The chart is redrawn first so the export
+   * reflects the latest visible state including any STS/PTP markers.
+   */
+  const handleDownloadPng = useCallback(() => {
+    const handle = chartHandleRef.current;
+    if (!handle) {
+      addNotice("warning", "PNG export is unavailable: no chart to capture.");
+      return;
+    }
+    const { trigger, receiver } = handle.getCanvases();
+    if (!trigger || !receiver) {
+      addNotice("warning", "PNG export is unavailable: no chart to capture.");
+      return;
+    }
+    if (!currentEntry) return;
+    try {
+      // Force a redraw so the export reflects the latest picker state
+      // and any pending uPlot internal rendering.
+      handle.redraw();
+      exportChartPng(trigger, receiver, currentEntry.fileName);
+      addNotice(
+        "info",
+        `Saved chart as ${currentEntry.fileName.replace(/\.csv$/i, "")}.png.`,
+      );
+    } catch (e) {
+      addNotice(
+        "error",
+        `PNG export failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }, [addNotice, currentEntry]);
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -378,6 +416,7 @@ export default function App() {
           {/* Show chart only when a file is loaded and a valid display exists. */}
           {currentRaw && chartDisplay ? (
             <WaveformChart
+              ref={chartHandleRef}
               display={chartDisplay}
               picker={picker}
               onPick={handlePick}
@@ -395,7 +434,9 @@ export default function App() {
 
           <ExportPanel
             canExport={results.length > 0}
+            canExportPng={currentRaw !== null}
             onDownloadCsv={handleDownloadCsv}
+            onDownloadPng={handleDownloadPng}
           />
 
           <NotificationPanel notices={notices} />

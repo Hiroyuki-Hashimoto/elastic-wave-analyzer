@@ -122,10 +122,53 @@ export function makeTimestampedFileName(
 }
 
 /**
- * Phase 2–6: export the current chart as a PNG download. Not yet
- * implemented; left as a stub for the next step.
+ * Phase 2–6: export the current chart as a PNG download. Combines the
+ * two uPlot canvases (Trigger on top, Receiver on bottom) into one
+ * PNG so the saved image matches what the user sees on screen,
+ * including the axes, grid, and any STS/PTP marker overlays drawn via
+ * the chart's hooks.draw callback.
  */
-export function exportChartPng(): void {
-  // TODO(phase-2-6): serialize uPlot canvas to PNG, trigger download.
-  throw new Error("exportChartPng: not implemented in Phase 2–5.");
+export function exportChartPng(
+  triggerCanvas: HTMLCanvasElement,
+  receiverCanvas: HTMLCanvasElement,
+  fileName: string,
+): void {
+  // Trim the original .csv extension if present; the user passes the
+  // raw source file name and the PNG is named after it.
+  const baseName = fileName.replace(/\.csv$/i, "");
+
+  // Combine the two uPlot canvases into a single image stacked
+  // vertically. The trigger canvas goes on top, receiver below, with
+  // a small gap to mirror the visual layout in the app.
+  const gap = 4;
+  const width = Math.max(triggerCanvas.width, receiverCanvas.width);
+  const height = triggerCanvas.height + receiverCanvas.height + gap;
+  const merged = document.createElement("canvas");
+  merged.width = width;
+  merged.height = height;
+  const ctx = merged.getContext("2d");
+  if (!ctx) {
+    throw new Error("exportChartPng: cannot acquire 2D context.");
+  }
+  // White background to match the chart panel surface.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  // Copy the trigger (top) and receiver (bottom) canvases.
+  ctx.drawImage(triggerCanvas, 0, 0);
+  ctx.drawImage(receiverCanvas, 0, triggerCanvas.height + gap);
+
+  // Download the merged canvas as a PNG.
+  merged.toBlob((blob) => {
+    if (!blob) {
+      throw new Error("exportChartPng: PNG blob creation failed.");
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${baseName}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, "image/png");
 }

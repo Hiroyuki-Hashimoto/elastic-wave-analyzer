@@ -338,6 +338,12 @@ body,
   cursor: not-allowed;
 }
 
+.export-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .notification-panel {
   display: flex;
   flex-direction: column;

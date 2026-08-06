@@ -1,7 +1,10 @@
 type Props = {
   /** True when at least one confirmed or canceled result is available. */
   canExport: boolean;
+  /** True when a file is loaded and a chart is rendered. */
+  canExportPng: boolean;
   onDownloadCsv: () => void;
+  onDownloadPng: () => void;
 };
 
 /**
@@ -9,18 +12,33 @@ type Props = {
  * the action is not currently available, so the user is never offered
  * a non-functional control.
  */
-export default function ExportPanel({ canExport, onDownloadCsv }: Props) {
+export default function ExportPanel({
+  canExport,
+  canExportPng,
+  onDownloadCsv,
+  onDownloadPng,
+}: Props) {
   return (
     <section className="export-panel">
       <h3 className="export-heading">Exports</h3>
-      <button
-        type="button"
-        className="export-button"
-        onClick={onDownloadCsv}
-        disabled={!canExport}
-      >
-        Download results (CSV)
-      </button>
+      <div className="export-buttons">
+        <button
+          type="button"
+          className="export-button"
+          onClick={onDownloadCsv}
+          disabled={!canExport}
+        >
+          Download results (CSV)
+        </button>
+        <button
+          type="button"
+          className="export-button"
+          onClick={onDownloadPng}
+          disabled={!canExportPng}
+        >
+          Save chart (PNG)
+        </button>
+      </div>
     </section>
   );
 }

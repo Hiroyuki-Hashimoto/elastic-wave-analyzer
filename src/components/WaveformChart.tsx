@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import UPlot from "uplot";
 import {
   findNearestSampleIndex,
@@ -27,24 +27,48 @@ type Props = {
 };
 
 /**
+ * Imperative handle exposed to App for the PNG exporter. App reads the
+ * two uPlot canvases (Trigger + Receiver) and asks the chart to render
+ * fresh frames so the export reflects the latest visible state.
+ */
+export type WaveformChartHandle = {
+  /** Returns the two uPlot canvas elements, or null if not yet drawn. */
+  getCanvases: () => {
+    trigger: HTMLCanvasElement | null;
+    receiver: HTMLCanvasElement | null;
+  };
+  /** Force a redraw on both plots so canvases hold the latest frame. */
+  redraw: () => void;
+};
+
+/**
  * Render the Trigger (top) and Receiver (bottom) waveforms as two
  * uPlot instances sharing a single numeric microsecond x-axis, with
  * left/right mouse interaction for STS/PTP picking. uPlot instances
  * are destroyed on unmount and before each rebuild; click and context
  * listeners are removed on the same lifecycle to avoid leaks.
  */
-export default function WaveformChart({
-  display,
-  picker,
-  onPick,
-  peakWidthUs,
-  dTUs,
-  zoomIndex,
-}: Props) {
+const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformChartImpl(
+  { display, picker, onPick, peakWidthUs, dTUs, zoomIndex },
+  ref,
+) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const receiverRef = useRef<HTMLDivElement>(null);
   const triggerPlotRef = useRef<UPlot | null>(null);
   const receiverPlotRef = useRef<UPlot | null>(null);
+
+  // Expose the live canvases to the parent so the PNG exporter can
+  // snapshot whatever the user is currently seeing.
+  useImperativeHandle(ref, () => ({
+    getCanvases: () => ({
+      trigger: triggerPlotRef.current?.ctx.canvas ?? null,
+      receiver: receiverPlotRef.current?.ctx.canvas ?? null,
+    }),
+    redraw: () => {
+      triggerPlotRef.current?.redraw(false, true);
+      receiverPlotRef.current?.redraw(false, true);
+    },
+  }));
 
   // Latest props kept in refs so native listeners/hook closures can read
   // the most recent values without rebinding on every render.
@@ -245,7 +269,9 @@ export default function WaveformChart({
       </p>
     </div>
   );
-}
+});
+
+export default WaveformChart;
 
 type ChartMarkers = {
   sts: PickPoint | null;
