@@ -181,7 +181,7 @@ export default function WaveformChart({ display, picker, onPick }: Props) {
       const stsIdx = findNearestSampleIndex(time, dataX);
       emit(stsIdx, "sts");
       // Trigger PTP = argmax over the whole displayed Trigger; Receiver
-      // PTP = argmax over values[stsIdx:] (matches Python on_left_click).
+      // PTP = argmax over values[stsIdx:], auto-derived from this STS.
       if (axis === "trigger") {
         emit(findTriggerPtpIndex(values), "ptp");
       } else {

@@ -68,7 +68,7 @@ export type PickerState = {
  */
 export const ZOOM_PERCENTAGES = [1.0, 0.7, 0.5, 0.3, 0.2, 0.15, 0.1] as const;
 
-/** Initial settings matching the Python reference defaults for Bristol CSVs. */
+/** Initial display settings chosen for typical oscilloscope CSV input. */
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   amplitudeGain: 20,
   offsetEnabled: true,

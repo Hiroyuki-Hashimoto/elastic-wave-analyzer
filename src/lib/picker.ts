@@ -14,7 +14,7 @@ export function emptyPickerState(): PickerState {
 
 /**
  * Find the index of the sample nearest to a clicked x-coordinate in µs.
- * Equivalent to Python: np.abs(Time - clickX).argmin().
+ * Linear scan returning the index whose time is closest to clickX.
  * Returns -1 for empty input so click handlers can short-circuit.
  */
 export function findNearestSampleIndex(
@@ -38,8 +38,7 @@ export function findNearestSampleIndex(
 
 /**
  * Find the Trigger PTP index: the global maximum of the displayed
- * Trigger waveform. Mirrors Python's np.argmax(y_data) on the trigger.
- * Returns -1 for empty input.
+ * Trigger waveform. Returns -1 for empty input.
  */
 export function findTriggerPtpIndex(values: number[]): number {
   if (!Array.isArray(values) || values.length === 0) return -1;
@@ -60,15 +59,11 @@ export function findTriggerPtpIndex(values: number[]): number {
  * displayed Receiver waveform at or after stsIndex. Returns -1 on
  * invalid input and falls back to stsIndex at the array tail.
  *
- * This is the argmax of values[stsIndex:], which is equivalent to
- * Python's find_peaks(width=50)[0] for the typical single-peak SINE
- * responses the analyzer targets: the global max of the post-STS tail
- * IS the first significant positive peak. Earlier one-sample noise
- * (~0.0001 V) is robustly rejected because it never exceeds the
- * real SINE peak (~0.0046 V), regardless of any negative trough in
- * the same window. A prominence-threshold heuristic (min + k*range)
- * was tried first but became negative when the tail covered both the
- * SINE trough and its peak, letting noise through.
+ * Implemented as the argmax of values[stsIndex:]. A prominence-threshold
+ * heuristic was considered but is fragile: when the post-STS tail spans
+ * both a deep trough and a tall peak, the threshold can turn negative
+ * and admit one-sample noise. The argmax of the tail is simpler and
+ * picks the strongest positive peak regardless of noise amplitude.
  */
 export function findReceiverPtpIndex(
   values: number[],
@@ -93,8 +88,8 @@ export function findReceiverPtpIndex(
 
 /**
  * Convert a PickerState into one AnalysisResult. Pick-dependent fields
- * are null unless the state is fully confirmed with all four picks,
- * mirroring Python's STS_deltaT / PTP_deltaT (arrival - start, µs).
+ * are null unless the state is fully confirmed with all four picks.
+ * Delta-T is arrival time minus start time (µs) for STS and PTP.
  */
 export function pickerToAnalysisResult(
   state: PickerState,
