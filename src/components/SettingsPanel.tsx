@@ -1,50 +1,21 @@
-import React from "react";
-import ExportPanel from "./ExportPanel";
 import type { DisplaySettings } from "../types";
 
 type Props = {
   settings: DisplaySettings;
   onSettingsChange: (next: DisplaySettings) => void;
-  onSelectFiles: (files: File[]) => void;
-  onDropFiles: (files: File[]) => void;
-  /** True when at least one confirmed or canceled result is available. */
-  canExport: boolean;
-  /** True when a file is loaded and a chart is rendered. */
-  canExportPng: boolean;
-  /** True when auto-PNG-on-confirm is armed. */
-  autoDownloadPng: boolean;
-  onDownloadCsv: () => void;
-  onToggleAutoDownloadPng: () => void;
 };
 
 /**
- * Presentational settings panel laid out in three blocks:
- *   1. A 2-column row with Imports on the left (Select + Drop stacked
- *      vertically) and Exports on the right.
- *   2. A measurement-controls grid where Subtract initial voltage and
- *      Trigger gain stack in column 1 (Subtract directly above
- *      Trigger gain) and Peak search width sits in column 2.
- *   3. A 2-column row with Time trimming and Wave velocity bordered
- *      subsections side by side so their Enable toggles read as
- *      parallel options.
+ * Settings panel holds only the per-measurement controls:
+ *   1. Subtract initial voltage and Trigger gain stacked in column 1,
+ *      Peak search width in column 2 row 1.
+ *   2. Time trimming and Wave velocity bordered subsections side by
+ *      side so their Enable toggles read as parallel options.
  *
- * The time-trim and wave-velocity controls keep their bordered
- * sub-group treatment so each checkbox + dependent inputs reads as
- * one activation toggle.
+ * The file picker, dropzone, results CSV download, and PNG auto-save
+ * toggle have moved to ImportsExportsPanel.
  */
-export default function SettingsPanel({
-  settings,
-  onSettingsChange,
-  onSelectFiles,
-  onDropFiles,
-  canExport,
-  canExportPng,
-  autoDownloadPng,
-  onDownloadCsv,
-  onToggleAutoDownloadPng,
-}: Props) {
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
+export default function SettingsPanel({ settings, onSettingsChange }: Props) {
   /** Patch a subset of settings and forward the merged value to App. */
   const update = (patch: Partial<DisplaySettings>) =>
     onSettingsChange({ ...settings, ...patch });
@@ -53,67 +24,9 @@ export default function SettingsPanel({
     <aside className="settings-panel">
       <h2 className="settings-title">Settings</h2>
 
-      {/* Block 1: Imports (left) + Exports (right) in a 2-column row. */}
-      <section className="settings-section-grid-2">
-        <div className="settings-section-stack">
-          <h3 className="settings-section-heading">Imports</h3>
-          {/* Hidden native file input triggered by the button click. */}
-          <button
-            type="button"
-            className="file-button"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            Select CSV file(s)
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            multiple
-            className="file-input-hidden"
-            onChange={(e) => {
-              const list = e.target.files;
-              if (list && list.length > 0) {
-                onSelectFiles(Array.from(list));
-              }
-              // Reset value so selecting the same file twice still fires.
-              e.target.value = "";
-            }}
-          />
-          {/* Dropzone: accept drag-and-drop of one or more CSV files. */}
-          <div
-            className="dropzone"
-            onDragOver={(e) => {
-              // preventDefault is required to allow subsequent drop.
-              e.preventDefault();
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              const list = e.dataTransfer.files;
-              if (list && list.length > 0) {
-                onDropFiles(Array.from(list));
-              }
-            }}
-          >
-            Drop CSV file(s) here
-          </div>
-        </div>
-
-        <div className="settings-section-stack">
-          <h3 className="settings-section-heading">Exports</h3>
-          <ExportPanel
-            canExport={canExport}
-            canExportPng={canExportPng}
-            autoDownloadPng={autoDownloadPng}
-            onDownloadCsv={onDownloadCsv}
-            onToggleAutoDownloadPng={onToggleAutoDownloadPng}
-          />
-        </div>
-      </section>
-
-      {/* Block 2: measurement controls. Subtract initial voltage and
-          Trigger gain stack in column 1; Peak search width sits in
-          column 2 row 1, leaving row 2 column 2 empty. */}
+      {/* Measurement controls. Subtract initial voltage and Trigger
+          gain stack in column 1; Peak search width sits in column 2
+          row 1, leaving row 2 column 2 empty. */}
       <section className="settings-measurement-grid">
         <label className="field field-row grid-c1-r1">
           <input
@@ -155,7 +68,7 @@ export default function SettingsPanel({
         </label>
       </section>
 
-      {/* Block 3: Time trimming and Wave velocity side by side. */}
+      {/* Time trimming and Wave velocity side by side. */}
       <section className="settings-section-grid-2">
         <div className="settings-subsection">
           <h3 className="settings-subsection-heading">Time trimming</h3>

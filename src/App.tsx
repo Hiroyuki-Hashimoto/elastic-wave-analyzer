@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ImportsExportsPanel from "./components/ImportsExportsPanel";
 import NotificationsErrorsPanel from "./components/NotificationsErrorsPanel";
 import ResultsTable from "./components/ResultsTable";
 import SettingsPanel from "./components/SettingsPanel";
@@ -459,9 +460,7 @@ export default function App() {
 
       <main className="app-main">
         <div className="settings-column">
-          <SettingsPanel
-            settings={settings}
-            onSettingsChange={setSettings}
+          <ImportsExportsPanel
             onSelectFiles={handleFiles}
             onDropFiles={handleFiles}
             canExport={results.length > 0}
@@ -469,6 +468,10 @@ export default function App() {
             autoDownloadPng={autoDownloadPng}
             onDownloadCsv={handleDownloadCsv}
             onToggleAutoDownloadPng={handleToggleAutoDownloadPng}
+          />
+          <SettingsPanel
+            settings={settings}
+            onSettingsChange={setSettings}
           />
           <NotificationsErrorsPanel
             errors={effectiveErrors}

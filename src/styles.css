@@ -65,7 +65,40 @@ body,
   display: flex;
   flex-direction: column;
   gap: 14px;
-  align-self: start;
+  /* Match the width of the other two stacked frames so the three
+     panels line up. Without this the panel shrinks to its content
+     (number inputs etc.) and ends up narrower than Imports & Exports. */
+  width: 560px;
+}
+
+.imports-exports-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Same width as the other two stacked frames for visual alignment. */
+  width: 560px;
+}
+
+.imports-exports-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.imports-exports-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.imports-exports-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .settings-title {
@@ -183,6 +216,9 @@ body,
   color: #fff;
   font-size: 13px;
   cursor: pointer;
+  /* Fill the column width inside ImportsExportsPanel so the
+     Select CSV button aligns with Download results (CSV) below. */
+  width: 100%;
 }
 
 .file-button:hover {
@@ -430,22 +466,17 @@ body,
   color: #8a1f1f;
 }
 
-.export-panel {
-  margin: 12px 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .export-button {
-  padding: 6px 10px;
+  padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--accent);
   color: #fff;
   font-size: 13px;
   cursor: pointer;
-  align-self: flex-start;
+  /* Fill the Exports column width so Download results (CSV) and
+     PNG auto-save match the Imports-side Select CSV button. */
+  width: 100%;
 }
 
 .export-button:disabled {
@@ -454,19 +485,16 @@ body,
   cursor: not-allowed;
 }
 
-.export-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .export-toggle-on {
   background: #2ca02c;
   border-color: #2ca02c;
 }
 
 .export-hint {
-  margin: 4px 0 0;
+  /* No top margin: the parent .imports-exports-stack gap already
+     sets the vertical rhythm and doubling it would misalign the
+     right column with the left one. */
+  margin: 0;
   font-size: 11px;
   color: var(--muted);
 }
