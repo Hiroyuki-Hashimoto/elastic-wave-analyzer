@@ -586,15 +586,15 @@ function buildConfirmMessage(
   result: AnalysisResult,
 ): string | null {
   if (
-    result.stsDeltaTUs === null ||
-    result.ptpDeltaTUs === null
+    result.stsPropagationTimeUs === null ||
+    result.ptpPropagationTimeUs === null
   ) {
     return null;
   }
   let msg =
     `Analysis confirmed for ${fileName}. ` +
-    `STS_deltaT=${result.stsDeltaTUs.toFixed(1)} us, ` +
-    `PTP_deltaT=${result.ptpDeltaTUs.toFixed(1)} us.`;
+    `STS_prop=${result.stsPropagationTimeUs.toFixed(1)} us, ` +
+    `PTP_prop=${result.ptpPropagationTimeUs.toFixed(1)} us.`;
   if (result.stsVelocityMps !== null || result.ptpVelocityMps !== null) {
     const sts = result.stsVelocityMps !== null
       ? result.stsVelocityMps.toFixed(1)

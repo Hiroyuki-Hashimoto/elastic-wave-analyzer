@@ -39,19 +39,19 @@ export type DisplayWaveform = {
   receiverV: number[];
 };
 
-/** Phase 2 output shape: per-file STS/PTP picks and delta-T (null until picked). */
+/** Phase 2 output shape: per-file STS/PTP picks and propagation time (null until picked). */
 export type AnalysisResult = {
   fileName: string;
-  stsStartUs: number | null;
-  stsStartV: number | null;
-  stsArrivalUs: number | null;
-  stsArrivalV: number | null;
-  ptpStartUs: number | null;
-  ptpStartV: number | null;
-  ptpArrivalUs: number | null;
-  ptpArrivalV: number | null;
-  stsDeltaTUs: number | null;
-  ptpDeltaTUs: number | null;
+  triggerStsTimeUs: number | null;
+  triggerStsVoltageV: number | null;
+  triggerPtpTimeUs: number | null;
+  triggerPtpVoltageV: number | null;
+  receiverStsTimeUs: number | null;
+  receiverStsVoltageV: number | null;
+  receiverPtpTimeUs: number | null;
+  receiverPtpVoltageV: number | null;
+  stsPropagationTimeUs: number | null;
+  ptpPropagationTimeUs: number | null;
   /** Wave velocity from STS picks, in m/s; null when not computed. */
   stsVelocityMps: number | null;
   /** Wave velocity from PTP picks, in m/s; null when not computed. */
