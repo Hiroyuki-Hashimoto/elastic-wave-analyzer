@@ -1,4 +1,4 @@
-import type { AnalysisResult, PickerState } from "../types";
+import type { AnalysisResult, PickerState, VelocityConfig } from "../types";
 
 /** Return a PickerState with all four picks unset and no confirm/cancel. */
 export function emptyPickerState(): PickerState {
@@ -115,13 +115,46 @@ function isMaxInWindow(
 }
 
 /**
+ * Compute wave velocity in m/s from a measured delta-T (µs), the
+ * propagation distance (mm), and an optional system delay correction
+ * (µs). Returns null when the effective delta-T is non-positive
+ * (zero division or negative, e.g. system delay exceeds measurement)
+ * or when any input is non-finite / non-positive.
+ *
+ * Formula: v = distance_m / time_s = (distance_mm / 1000) /
+ * ((deltaTUs - systemDelayUs) / 1_000_000) = distance_mm * 1000 /
+ * effectiveDeltaTUs.
+ */
+export function computeVelocityMps(
+  deltaTUs: number,
+  distanceMm: number,
+  systemDelayUs: number,
+): number | null {
+  if (!Number.isFinite(deltaTUs) || !Number.isFinite(distanceMm)) return null;
+  if (!Number.isFinite(systemDelayUs)) return null;
+  if (distanceMm <= 0) return null;
+  // effective delta-T in µs after subtracting the system delay correction.
+  const effectiveDeltaTUs = deltaTUs - systemDelayUs;
+  // Block zero and negative effective delta-T: dividing would yield
+  // Infinity or a negative velocity, neither of which is physically
+  // meaningful for a forward-propagating elastic wave.
+  if (!Number.isFinite(effectiveDeltaTUs) || effectiveDeltaTUs <= 0) return null;
+  return (distanceMm * 1000) / effectiveDeltaTUs;
+}
+
+/**
  * Convert a PickerState into one AnalysisResult. Pick-dependent fields
  * are null unless the state is fully confirmed with all four picks.
  * Delta-T is arrival time minus start time (µs) for STS and PTP.
+ *
+ * When `velocityConfig.enabled` is true, also fills stsVelocityMps /
+ * ptpVelocityMps from the measured delta-Ts and the supplied distance /
+ * system delay. The fields stay null otherwise.
  */
 export function pickerToAnalysisResult(
   state: PickerState,
   fileName: string,
+  velocityConfig?: VelocityConfig,
 ): AnalysisResult {
   const empty: AnalysisResult = {
     fileName,
@@ -135,6 +168,8 @@ export function pickerToAnalysisResult(
     ptpArrivalV: null,
     stsDeltaTUs: null,
     ptpDeltaTUs: null,
+    stsVelocityMps: null,
+    ptpVelocityMps: null,
   };
   // Canceled or not-yet-confirmed: no pick-dependent output.
   if (!state || state.isCanceled || !state.isConfirmed) return empty;
@@ -149,6 +184,25 @@ export function pickerToAnalysisResult(
   const stsArrivalUs = receiverSts.timeUs;
   const ptpStartUs = triggerPtp.timeUs;
   const ptpArrivalUs = receiverPtp.timeUs;
+  const stsDeltaTUs = stsArrivalUs - stsStartUs;
+  const ptpDeltaTUs = ptpArrivalUs - ptpStartUs;
+
+  // Velocity is computed only when explicitly enabled; otherwise both
+  // columns stay null so the CSV cells are emitted empty.
+  let stsVelocityMps: number | null = null;
+  let ptpVelocityMps: number | null = null;
+  if (velocityConfig?.enabled) {
+    stsVelocityMps = computeVelocityMps(
+      stsDeltaTUs,
+      velocityConfig.distanceMm,
+      velocityConfig.systemDelayUs,
+    );
+    ptpVelocityMps = computeVelocityMps(
+      ptpDeltaTUs,
+      velocityConfig.distanceMm,
+      velocityConfig.systemDelayUs,
+    );
+  }
 
   return {
     fileName,
@@ -161,7 +215,9 @@ export function pickerToAnalysisResult(
     ptpArrivalUs,
     ptpArrivalV: receiverPtp.voltage,
     // Delta-T in µs: arrival time minus start time for STS and PTP.
-    stsDeltaTUs: stsArrivalUs - stsStartUs,
-    ptpDeltaTUs: ptpArrivalUs - ptpStartUs,
+    stsDeltaTUs,
+    ptpDeltaTUs,
+    stsVelocityMps,
+    ptpVelocityMps,
   };
 }

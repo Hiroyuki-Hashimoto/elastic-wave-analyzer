@@ -141,6 +141,44 @@ export default function SettingsPanel({
           />
         </label>
 
+        <label className="field field-row">
+          <input
+            type="checkbox"
+            checked={settings.velocityEnabled}
+            onChange={(e) => update({ velocityEnabled: e.target.checked })}
+          />
+          <span>Enable wave velocity calculation</span>
+        </label>
+
+        <label className="field">
+          <span className="field-label">Distance (mm)</span>
+          <input
+            type="number"
+            step="any"
+            min="0"
+            disabled={!settings.velocityEnabled}
+            value={settings.distanceMm}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              update({ distanceMm: Number.isFinite(v) && v >= 0 ? v : 0 });
+            }}
+          />
+        </label>
+
+        <label className="field">
+          <span className="field-label">System delay correction (us)</span>
+          <input
+            type="number"
+            step="any"
+            disabled={!settings.velocityEnabled}
+            value={settings.systemDelayUs}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              update({ systemDelayUs: Number.isFinite(v) ? v : 0 });
+            }}
+          />
+        </label>
+
         <label className="field">
           <span className="field-label">Peak search width (µs)</span>
           <input

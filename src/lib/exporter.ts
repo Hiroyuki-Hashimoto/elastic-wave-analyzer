@@ -19,12 +19,16 @@ export const RESULTS_CSV_HEADER = [
   "PTP_a(V)",
   "STS_deltaT(us)",
   "PTP_deltaT(us)",
+  "STS_vel(m/s)",
+  "PTP_vel(m/s)",
 ] as const;
 
 /** Decimal precision for time / delta-T columns (µs). */
 const TIME_DECIMALS = 1;
 /** Decimal precision for voltage columns (V). */
 const VOLTAGE_DECIMALS = 6;
+/** Decimal precision for velocity columns (m/s). */
+const VELOCITY_DECIMALS = 3;
 
 /**
  * Serialize an array of AnalysisResult rows into the exact header / row
@@ -49,6 +53,8 @@ export function exportResultsCsv(results: AnalysisResult[]): string {
       formatNumberCell(r.ptpArrivalV, VOLTAGE_DECIMALS),
       formatNumberCell(r.stsDeltaTUs, TIME_DECIMALS),
       formatNumberCell(r.ptpDeltaTUs, TIME_DECIMALS),
+      formatNumberCell(r.stsVelocityMps, VELOCITY_DECIMALS),
+      formatNumberCell(r.ptpVelocityMps, VELOCITY_DECIMALS),
     ];
     lines.push(row.join(","));
   }

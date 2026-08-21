@@ -17,6 +17,19 @@ export type DisplaySettings = {
   peakWidthUs: number;
   /** Index into ZOOM_PERCENTAGES; the visible x-range shrinks accordingly. */
   zoomIndex: number;
+  /** When true, Enter-confirm computes STS/PTP velocities and emits them in CSV. */
+  velocityEnabled: boolean;
+  /** Propagation distance between Trigger and Receiver, in millimetres. */
+  distanceMm: number;
+  /** Subtract this µs from each measured delta-T before computing velocity. */
+  systemDelayUs: number;
+};
+
+/** Subset of DisplaySettings consumed by the velocity helper. */
+export type VelocityConfig = {
+  enabled: boolean;
+  distanceMm: number;
+  systemDelayUs: number;
 };
 
 /** Waveform after applying display settings; consumed directly by the chart. */
@@ -39,6 +52,10 @@ export type AnalysisResult = {
   ptpArrivalV: number | null;
   stsDeltaTUs: number | null;
   ptpDeltaTUs: number | null;
+  /** Wave velocity from STS picks, in m/s; null when not computed. */
+  stsVelocityMps: number | null;
+  /** Wave velocity from PTP picks, in m/s; null when not computed. */
+  ptpVelocityMps: number | null;
 };
 
 /** Which chart a pick belongs to: upper Trigger or lower Receiver. */
@@ -93,4 +110,8 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   peakWidthUs: 50,
   // Start at 100% zoom (full x-range visible).
   zoomIndex: 0,
+  // Wave velocity is off by default; 100 mm / 0 µs match common lab setups.
+  velocityEnabled: false,
+  distanceMm: 100,
+  systemDelayUs: 0,
 };

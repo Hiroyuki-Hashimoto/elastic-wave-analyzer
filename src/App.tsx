@@ -25,6 +25,7 @@ import {
   type PickPoint,
   type PickerState,
   type RawWaveform,
+  type VelocityConfig,
 } from "./types";
 
 /** A single entry in the analysis queue. raw is null when the file failed to parse. */
@@ -271,15 +272,25 @@ export default function App() {
   /**
    * Append a confirmed (Enter) or canceled (Escape) result to the results
    * collection. The picker flags are set so pickerToAnalysisResult fills
-   * pick fields only when confirmed.
+   * pick fields only when confirmed. The optional velocityConfig is
+   * forwarded so the stored row also carries STS/PTP velocities when
+   * wave velocity calculation is enabled.
    */
   const recordResult = useCallback(
-    (pickerSnapshot: PickerState, confirmed: boolean) => {
+    (
+      pickerSnapshot: PickerState,
+      confirmed: boolean,
+      velocityConfig?: VelocityConfig,
+    ) => {
       if (!currentRaw) return;
       const stateForResult: PickerState = confirmed
         ? { ...pickerSnapshot, isConfirmed: true, isCanceled: false }
         : { ...pickerSnapshot, isConfirmed: false, isCanceled: true };
-      const result = pickerToAnalysisResult(stateForResult, currentRaw.fileName);
+      const result = pickerToAnalysisResult(
+        stateForResult,
+        currentRaw.fileName,
+        velocityConfig,
+      );
       setResults((prev) => [...prev, result]);
     },
     [currentRaw],
@@ -368,11 +379,39 @@ export default function App() {
           );
           return;
         }
-        recordResult(picker, true);
+        // Snapshot of the velocity config consumed by pickerToAnalysisResult.
+        const velocityConfig: VelocityConfig = {
+          enabled: settings.velocityEnabled,
+          distanceMm: settings.distanceMm,
+          systemDelayUs: settings.systemDelayUs,
+        };
+        // Compute the result up front: needed both to validate velocity
+        // and to feed the success notice without a second call.
         const result = pickerToAnalysisResult(
           { ...picker, isConfirmed: true, isCanceled: false },
           currentRaw.fileName,
+          velocityConfig,
         );
+        // Velocity guard: zero or negative effective delta-T (system
+        // delay equals or exceeds the measured delta-T, or distance is
+        // non-positive) yields an undefined velocity. When velocity
+        // calculation is enabled, treat that as a hard block on Enter:
+        // emit a warning and do NOT record or advance the queue.
+        if (settings.velocityEnabled) {
+          const blocked: string[] = [];
+          if (result.stsVelocityMps === null) blocked.push("STS");
+          if (result.ptpVelocityMps === null) blocked.push("PTP");
+          if (blocked.length > 0) {
+            addNotice(
+              "warning",
+              `Cannot confirm: ${blocked.join(" and ")} velocity is undefined ` +
+                `(effective delta-T is zero or negative, or distance is non-positive). ` +
+                `Enter blocked.`,
+            );
+            return;
+          }
+        }
+        recordResult(picker, true, velocityConfig);
         const msg = buildConfirmMessage(currentRaw.fileName, result);
         if (msg) addNotice("success", msg);
         // Auto-PNG: snapshot the current chart when the toggle is on.
@@ -396,7 +435,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [currentRaw, picker, recordResult, advanceQueue, addNotice, autoDownloadPng, capturePng]);
+  }, [currentRaw, picker, recordResult, advanceQueue, addNotice, autoDownloadPng, capturePng, settings]);
 
   // Display label for the current file in the progress header.
   const currentIndex = currentEntry
@@ -540,6 +579,7 @@ function statusLabel(s: QueueEntry["status"]): string {
 /**
  * Build the success message shown in the notice log when Enter confirms
  * a full set of picks. Returns null if any required pick is missing.
+ * STS/PTP velocities are appended when at least one is non-null.
  */
 function buildConfirmMessage(
   fileName: string,
@@ -551,11 +591,20 @@ function buildConfirmMessage(
   ) {
     return null;
   }
-  return (
+  let msg =
     `Analysis confirmed for ${fileName}. ` +
     `STS_deltaT=${result.stsDeltaTUs.toFixed(1)} us, ` +
-    `PTP_deltaT=${result.ptpDeltaTUs.toFixed(1)} us.`
-  );
+    `PTP_deltaT=${result.ptpDeltaTUs.toFixed(1)} us.`;
+  if (result.stsVelocityMps !== null || result.ptpVelocityMps !== null) {
+    const sts = result.stsVelocityMps !== null
+      ? result.stsVelocityMps.toFixed(1)
+      : "-";
+    const ptp = result.ptpVelocityMps !== null
+      ? result.ptpVelocityMps.toFixed(1)
+      : "-";
+    msg += ` STS_vel=${sts} m/s, PTP_vel=${ptp} m/s.`;
+  }
+  return msg;
 }
 
 /**
