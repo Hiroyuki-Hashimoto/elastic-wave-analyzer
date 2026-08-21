@@ -1,4 +1,6 @@
 import { ZOOM_PERCENTAGES } from "../types";
+import type { Notice } from "../types";
+import NotificationPanel from "./NotificationPanel";
 
 type Props = {
   /** Validation errors from CSV parsing plus the live trim error. */
@@ -9,20 +11,27 @@ type Props = {
   resultCount: number;
   /** Index into ZOOM_PERCENTAGES for the current zoom level. */
   zoomIndex: number;
+  /** In-app event log (info / success / warning / error notices). */
+  notices: Notice[];
 };
 
 /**
  * Read-only status frame that sits below the Settings panel. Holds
  * everything that is not a user-controlled setting: validation errors,
- * the currently loaded file name, the running result count, and the
- * current zoom level. Keeping these out of SettingsPanel makes the
- * boundary between "things you change" and "things you read" obvious.
+ * the merged-in Notifications log, the currently loaded file name,
+ * the running result count, and the current zoom level. Keeping
+ * these out of SettingsPanel makes the boundary between "things you
+ * change" and "things you read" obvious.
+ *
+ * The whole panel is fixed-width and scrolls vertically so the merged
+ * Errors + Notifications log stays manageable during long sessions.
  */
 export default function InfoPanel({
   errors,
   fileName,
   resultCount,
   zoomIndex,
+  notices,
 }: Props) {
   return (
     <aside className="info-panel">
@@ -40,6 +49,13 @@ export default function InfoPanel({
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="info-section">
+        {/* Merged-in Notifications log: reuses NotificationPanel so the
+            success / info / warning / error color rules stay consistent
+            with the previous stand-alone panel. */}
+        <NotificationPanel notices={notices} title="Notifications" />
       </section>
 
       <section className="info-section">

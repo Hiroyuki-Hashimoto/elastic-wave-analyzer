@@ -302,12 +302,6 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     }
   }
 
-  // Picker summary strings: "--" for unset points, formatted µs otherwise.
-  const triggerStsLabel = formatPick(picker.triggerSts);
-  const triggerPtpLabel = formatPick(picker.triggerPtp);
-  const receiverStsLabel = formatPick(picker.receiverSts);
-  const receiverPtpLabel = formatPick(picker.receiverPtp);
-
   return (
     <div className="chart-stack">
       <div className="chart-block">
@@ -316,11 +310,6 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       <div className="chart-block">
         <div className="chart-host" ref={receiverRef} />
       </div>
-      <p className="picker-summary">
-        Trigger — STS: {triggerStsLabel} | PTP: {triggerPtpLabel}
-        <br />
-        Receiver — STS: {receiverStsLabel} | PTP: {receiverPtpLabel}
-      </p>
     </div>
   );
 });
@@ -429,7 +418,8 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
   ctx.font = "11px sans-serif";
   ctx.textBaseline = "top";
 
-  // STS marker: red vertical line with time label near the top axis.
+  // STS marker: red vertical line with a 2-line label (kind on line 1,
+  // time value on line 2) anchored near the top axis.
   if (markers.sts) {
     // valToPos(dataValue, scaleKey, canvasPixels=true) → canvas pixel x.
     const x = u.valToPos(markers.sts.timeUs, "time-us", true);
@@ -438,12 +428,12 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
     ctx.stroke();
-    // Annotation: short time string anchored just inside the plot area.
-    const label = `${formatPick(markers.sts)} µs`;
     ctx.fillStyle = "#d62728";
-    ctx.fillText(label, x + 4, top + 4);
+    ctx.fillText("STS", x + 4, top + 4);
+    ctx.fillText(`${formatPick(markers.sts)} µs`, x + 4, top + 18);
   }
-  // PTP marker: green vertical line with time label near the top axis.
+  // PTP marker: green vertical line, two-line label pushed below STS so
+  // the two annotations never visually collide.
   if (markers.ptp) {
     const x = u.valToPos(markers.ptp.timeUs, "time-us", true);
     ctx.strokeStyle = "#2ca02c";
@@ -451,10 +441,9 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
     ctx.stroke();
-    const label = `${formatPick(markers.ptp)} µs`;
     ctx.fillStyle = "#2ca02c";
-    // Nudge PTP label a few pixels lower so STS+PTP labels don't collide.
-    ctx.fillText(label, x + 4, top + 20);
+    ctx.fillText("PTP", x + 4, top + 34);
+    ctx.fillText(`${formatPick(markers.ptp)} µs`, x + 4, top + 48);
   }
   ctx.restore();
 }

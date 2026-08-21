@@ -18,10 +18,14 @@ type Props = {
 };
 
 /**
- * Presentational settings panel: file Imports, Exports, and the
- * measurement controls (Trigger gain, offset, time trim, wave
- * velocity, peak search width). All state lives in App; this
- * component only formats DOM events into settings-change callbacks.
+ * Presentational settings panel laid out in two columns (560px wide
+ * overall). All sections use a 2-column grid:
+ *   - Imports: file button + dropzone side by side
+ *   - Exports: results CSV + PNG auto-save side by side
+ *   - Measurement controls: Subtract initial voltage and Trigger gain
+ *     stacked in column 1; Peak search width and the two bordered
+ *     subsections in column 2; Wave velocity spans both columns at
+ *     the bottom so the Distance / System-delay inputs have room.
  *
  * The time-trim and wave-velocity controls are wrapped in bordered
  * subsections so the checkbox + dependent inputs read as one
@@ -48,10 +52,8 @@ export default function SettingsPanel({
     <aside className="settings-panel">
       <h2 className="settings-title">Settings</h2>
 
-      {/* Imports: file picker + dropzone. */}
-      <section className="settings-section">
-        <h3 className="settings-section-heading">Imports</h3>
-        {/* Hidden native file input triggered by the button click. */}
+      {/* Imports: file button and dropzone side by side. */}
+      <section className="settings-section-grid-2">
         <button
           type="button"
           className="file-button"
@@ -74,7 +76,6 @@ export default function SettingsPanel({
             e.target.value = "";
           }}
         />
-        {/* Dropzone: accept drag-and-drop of one or more CSV files. */}
         <div
           className="dropzone"
           onDragOver={(e) => {
@@ -93,9 +94,8 @@ export default function SettingsPanel({
         </div>
       </section>
 
-      {/* Exports: results CSV download + PNG auto-save toggle, moved
-          out of the chart area so all I/O controls sit together. */}
-      <section className="settings-section">
+      {/* Exports: results CSV download and PNG auto-save side by side. */}
+      <section className="settings-section-grid-2">
         <ExportPanel
           canExport={canExport}
           canExportPng={canExportPng}
@@ -105,10 +105,21 @@ export default function SettingsPanel({
         />
       </section>
 
-      {/* Top-level measurement controls that don't activate dependent
-          inputs: Trigger gain, offset correction, peak search width. */}
-      <section className="settings-section">
-        <label className="field">
+      {/* Measurement controls in a 2-column grid. Column 1 stacks
+          Subtract initial voltage on top of Trigger gain; column 2
+          holds Peak search width above the Time trimming subsection;
+          Wave velocity spans both columns at the bottom. */}
+      <section className="settings-section-grid-2 settings-measurement-grid">
+        <label className="field field-row grid-c1-r1">
+          <input
+            type="checkbox"
+            checked={settings.offsetEnabled}
+            onChange={(e) => update({ offsetEnabled: e.target.checked })}
+          />
+          <span>Subtract initial voltage (offset correction)</span>
+        </label>
+
+        <label className="field grid-c1-r2">
           <span className="field-label">Trigger gain</span>
           <input
             type="number"
@@ -122,16 +133,7 @@ export default function SettingsPanel({
           />
         </label>
 
-        <label className="field field-row">
-          <input
-            type="checkbox"
-            checked={settings.offsetEnabled}
-            onChange={(e) => update({ offsetEnabled: e.target.checked })}
-          />
-          <span>Subtract initial voltage (offset correction)</span>
-        </label>
-
-        <label className="field">
+        <label className="field grid-c2-r1">
           <span className="field-label">Peak search width (µs)</span>
           <input
             type="number"
@@ -146,13 +148,8 @@ export default function SettingsPanel({
             }}
           />
         </label>
-      </section>
 
-      {/* Time trimming: checkbox + start/end inputs sit in one bordered
-          group so the activation toggle and its dependent fields are
-          visually tied together. */}
-      <section className="settings-section">
-        <div className="settings-subsection">
+        <div className="settings-subsection grid-c2-r2">
           <h3 className="settings-subsection-heading">Time trimming</h3>
           <label className="field field-row">
             <input
@@ -192,9 +189,7 @@ export default function SettingsPanel({
           </label>
         </div>
 
-        {/* Wave velocity: same bordered-group treatment for the
-            checkbox + distance + system-delay fields. */}
-        <div className="settings-subsection">
+        <div className="settings-subsection grid-span2-r3">
           <h3 className="settings-subsection-heading">Wave velocity</h3>
           <label className="field field-row">
             <input

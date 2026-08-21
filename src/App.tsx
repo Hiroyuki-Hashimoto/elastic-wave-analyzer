@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import InfoPanel from "./components/InfoPanel";
-import NotificationPanel from "./components/NotificationPanel";
 import ResultsTable from "./components/ResultsTable";
 import SettingsPanel from "./components/SettingsPanel";
 import WaveformChart, {
@@ -476,6 +475,7 @@ export default function App() {
             fileName={currentEntry?.fileName ?? null}
             resultCount={results.length}
             zoomIndex={settings.zoomIndex}
+            notices={notices}
           />
         </div>
 
@@ -537,8 +537,6 @@ export default function App() {
           )}
 
           <QueueList queue={queue} />
-
-          <NotificationPanel notices={notices} />
         </section>
       </main>
     </div>

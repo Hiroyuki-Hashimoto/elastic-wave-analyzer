@@ -50,7 +50,9 @@ body,
 .app-main {
   flex: 1;
   display: grid;
-  grid-template-columns: 280px 1fr;
+  /* Left column doubled to 560px so Settings can lay fields out in 2
+     columns and the Info panel can match the same width. */
+  grid-template-columns: 560px 1fr;
   gap: 16px;
   padding: 16px;
 }
@@ -77,6 +79,31 @@ body,
   flex-direction: column;
   gap: 8px;
 }
+
+/* 2-column section used by Imports and Exports where the section has
+   two children that should sit side by side. */
+.settings-section-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+
+/* Measurement grid hosts the explicit grid-row/grid-column placements
+   that keep Subtract initial voltage directly above Trigger gain. */
+.settings-measurement-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  column-gap: 12px;
+  row-gap: 8px;
+}
+
+.grid-c1-r1 { grid-column: 1; grid-row: 1; }
+.grid-c1-r2 { grid-column: 1; grid-row: 2; }
+.grid-c2-r1 { grid-column: 2; grid-row: 1; }
+.grid-c2-r2 { grid-column: 2; grid-row: 2; }
+.grid-span2-r3 { grid-column: 1 / span 2; grid-row: 3; }
 
 .settings-section-heading {
   margin: 0;
@@ -112,6 +139,13 @@ body,
 }
 
 .info-panel {
+  /* Fixed width matching the widened Settings column so the two frames
+     align cleanly when stacked vertically. The vertical scroll keeps
+     the merged Errors + Notifications log manageable during long
+     sessions without growing the page. */
+  width: 560px;
+  max-height: 60vh;
+  overflow-y: auto;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -257,17 +291,6 @@ body,
   text-align: center;
   color: var(--muted);
   font-size: 14px;
-}
-
-.picker-summary {
-  margin: 0;
-  padding: 8px 10px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text);
-  background: #fafbfc;
-  border: 1px solid var(--border);
-  border-radius: 4px;
 }
 
 .zoom-label {
