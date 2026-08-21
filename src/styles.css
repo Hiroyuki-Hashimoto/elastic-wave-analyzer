@@ -130,6 +130,12 @@ body,
   font-size: 13px;
 }
 
+.field input[type="number"]:disabled {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
 .errors-heading {
   margin: 0;
   font-size: 13px;

@@ -118,6 +118,7 @@ export default function SettingsPanel({
           <input
             type="number"
             step="any"
+            disabled={!settings.trimEnabled}
             value={settings.trimStartUs}
             onChange={(e) => {
               const v = Number(e.target.value);
@@ -131,6 +132,7 @@ export default function SettingsPanel({
           <input
             type="number"
             step="any"
+            disabled={!settings.trimEnabled}
             value={settings.trimEndUs}
             onChange={(e) => {
               const v = Number(e.target.value);
