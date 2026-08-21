@@ -66,7 +66,7 @@ existing plot).
 - **Drop a CSV file here** — drag a `.csv` onto the dropzone.
 - **Amplitude gain** — multiplies the Trigger amplitude only
   (default `20`).
-- **Subtract initial value (offset correction)** — subtracts each
+- **Subtract initial voltage (offset correction)** — subtracts each
   series' first value from the whole series (default on).
 - **Enable time trimming** — restricts the displayed range
   (default off).

@@ -101,7 +101,7 @@ export default function SettingsPanel({
             checked={settings.offsetEnabled}
             onChange={(e) => update({ offsetEnabled: e.target.checked })}
           />
-          <span>Subtract initial value (offset correction)</span>
+          <span>Subtract initial voltage (offset correction)</span>
         </label>
 
         <label className="field field-row">
