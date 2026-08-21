@@ -19,8 +19,11 @@ export const RESULTS_CSV_HEADER = [
   "Receiver_PTP_voltage(V)",
   "STS_propagation_time(us)",
   "PTP_propagation_time(us)",
+  "STS_propagation_time_corrected(us)",
+  "PTP_propagation_time_corrected(us)",
   "STS_velocity(m/s)",
   "PTP_velocity(m/s)",
+  "Distance(mm)",
 ] as const;
 
 /** Decimal precision for time / delta-T columns (µs). */
@@ -29,6 +32,8 @@ const TIME_DECIMALS = 1;
 const VOLTAGE_DECIMALS = 6;
 /** Decimal precision for velocity columns (m/s). */
 const VELOCITY_DECIMALS = 3;
+/** Decimal precision for the distance setting column (mm). */
+const DISTANCE_DECIMALS = 3;
 
 /**
  * Serialize an array of AnalysisResult rows into the exact header / row
@@ -53,8 +58,11 @@ export function exportResultsCsv(results: AnalysisResult[]): string {
       formatNumberCell(r.receiverPtpVoltageV, VOLTAGE_DECIMALS),
       formatNumberCell(r.stsPropagationTimeUs, TIME_DECIMALS),
       formatNumberCell(r.ptpPropagationTimeUs, TIME_DECIMALS),
+      formatNumberCell(r.stsPropagationTimeCorrectedUs, TIME_DECIMALS),
+      formatNumberCell(r.ptpPropagationTimeCorrectedUs, TIME_DECIMALS),
       formatNumberCell(r.stsVelocityMps, VELOCITY_DECIMALS),
       formatNumberCell(r.ptpVelocityMps, VELOCITY_DECIMALS),
+      formatNumberCell(r.distanceMm, DISTANCE_DECIMALS),
     ];
     lines.push(row.join(","));
   }

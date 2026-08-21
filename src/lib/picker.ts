@@ -168,8 +168,11 @@ export function pickerToAnalysisResult(
     receiverPtpVoltageV: null,
     stsPropagationTimeUs: null,
     ptpPropagationTimeUs: null,
+    stsPropagationTimeCorrectedUs: null,
+    ptpPropagationTimeCorrectedUs: null,
     stsVelocityMps: null,
     ptpVelocityMps: null,
+    distanceMm: null,
   };
   // Canceled or not-yet-confirmed: no pick-dependent output.
   if (!state || state.isCanceled || !state.isConfirmed) return empty;
@@ -188,9 +191,15 @@ export function pickerToAnalysisResult(
   const ptpDeltaTUs = ptpArrivalUs - ptpStartUs;
 
   // Velocity is computed only when explicitly enabled; otherwise both
-  // columns stay null so the CSV cells are emitted empty.
+  // columns stay null so the CSV cells are emitted empty. The
+  // corrected propagation times and the distance input are also left
+  // null in that case, so the CSV always emits empty cells for the
+  // velocity-related columns when velocity calculation is OFF.
   let stsVelocityMps: number | null = null;
   let ptpVelocityMps: number | null = null;
+  let stsPropagationTimeCorrectedUs: number | null = null;
+  let ptpPropagationTimeCorrectedUs: number | null = null;
+  let distanceMm: number | null = null;
   if (velocityConfig?.enabled) {
     stsVelocityMps = computeVelocityMps(
       stsDeltaTUs,
@@ -202,6 +211,14 @@ export function pickerToAnalysisResult(
       velocityConfig.distanceMm,
       velocityConfig.systemDelayUs,
     );
+    // Corrected propagation time in µs: raw propagation time minus the
+    // user-supplied system delay. Mathematically it can go negative if
+    // the delay exceeds the measurement, which the Enter-time guard in
+    // App.tsx already blocks from being stored. We still emit it as-is
+    // so the corrected column is a faithful (delta - delay) snapshot.
+    stsPropagationTimeCorrectedUs = stsDeltaTUs - velocityConfig.systemDelayUs;
+    ptpPropagationTimeCorrectedUs = ptpDeltaTUs - velocityConfig.systemDelayUs;
+    distanceMm = velocityConfig.distanceMm;
   }
 
   return {
@@ -217,7 +234,10 @@ export function pickerToAnalysisResult(
     // Propagation time in µs: receiver time minus trigger time for STS and PTP.
     stsPropagationTimeUs: stsDeltaTUs,
     ptpPropagationTimeUs: ptpDeltaTUs,
+    stsPropagationTimeCorrectedUs,
+    ptpPropagationTimeCorrectedUs,
     stsVelocityMps,
     ptpVelocityMps,
+    distanceMm,
   };
 }

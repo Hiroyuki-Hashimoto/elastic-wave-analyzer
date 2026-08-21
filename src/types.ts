@@ -52,10 +52,16 @@ export type AnalysisResult = {
   receiverPtpVoltageV: number | null;
   stsPropagationTimeUs: number | null;
   ptpPropagationTimeUs: number | null;
+  /** Propagation time after subtracting system delay, in µs; null when not computed. */
+  stsPropagationTimeCorrectedUs: number | null;
+  /** Propagation time after subtracting system delay, in µs; null when not computed. */
+  ptpPropagationTimeCorrectedUs: number | null;
   /** Wave velocity from STS picks, in m/s; null when not computed. */
   stsVelocityMps: number | null;
   /** Wave velocity from PTP picks, in m/s; null when not computed. */
   ptpVelocityMps: number | null;
+  /** Propagation distance used for velocity calc, in mm; null when not computed. */
+  distanceMm: number | null;
 };
 
 /** Which chart a pick belongs to: upper Trigger or lower Receiver. */
