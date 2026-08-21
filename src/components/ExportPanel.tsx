@@ -24,7 +24,6 @@ export default function ExportPanel({
 }: Props) {
   return (
     <section className="export-panel">
-      <h3 className="export-heading">Exports</h3>
       <div className="export-buttons">
         <button
           type="button"
