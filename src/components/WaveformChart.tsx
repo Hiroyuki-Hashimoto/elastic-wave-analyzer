@@ -6,6 +6,17 @@ import {
   findTriggerPtpIndex,
 } from "../lib/picker";
 import { ZOOM_PERCENTAGES } from "../types";
+
+/**
+ * Fixed CSS-pixel height for both the Trigger and Receiver plots.
+ * Shared between the initial buildOptions (so the very first frame is
+ * already at this height) and the ResizeObserver (which must NOT read
+ * the canvas height back from uPlot, since uPlot.rect returns the
+ * .u-over overlay's bounding rect, sized to plotHgtCss = full height
+ * minus axis / title space; using that would shrink the chart on
+ * every observer tick).
+ */
+const CHART_HEIGHT = 260;
 import type {
   DisplayWaveform,
   PickAxis,
@@ -181,10 +192,12 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       // Skip the 0-width transition frames some browsers emit before the
       // host is laid out; setSize with 0 would crash uPlot's canvas math.
       if (width && width > 0 && plotRef.current) {
-        // uPlot.setSize requires both width and height; reuse the plot's
-        // current height so future height tweaks still propagate.
-        const height = plotRef.current.rect.height;
-        plotRef.current.setSize({ width, height });
+        // Use CHART_HEIGHT instead of plotRef.current.rect.height: the
+        // .rect getter returns the .u-over overlay's bounding rect, which
+        // uPlot sizes to plotHgtCss (opts.height minus axis / title space,
+        // about 50px less than the canvas). Passing that to setSize would
+        // shrink the canvas on the very first observer tick.
+        plotRef.current.setSize({ width, height: CHART_HEIGHT });
       }
     };
     const triggerObs = new ResizeObserver((entries) =>
@@ -346,7 +359,7 @@ function buildOptions(
   return {
     title,
     width,
-    height: 260,
+    height: CHART_HEIGHT,
     series: [
       {
         label: "Time (µs)",
