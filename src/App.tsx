@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ExportPanel from "./components/ExportPanel";
+import InfoPanel from "./components/InfoPanel";
 import NotificationPanel from "./components/NotificationPanel";
 import ResultsTable from "./components/ResultsTable";
 import SettingsPanel from "./components/SettingsPanel";
@@ -459,15 +459,25 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        <SettingsPanel
-          settings={settings}
-          onSettingsChange={setSettings}
-          onSelectFiles={handleFiles}
-          onDropFiles={handleFiles}
-          errors={effectiveErrors}
-          fileName={currentEntry?.fileName ?? null}
-          resultCount={results.length}
-        />
+        <div className="settings-column">
+          <SettingsPanel
+            settings={settings}
+            onSettingsChange={setSettings}
+            onSelectFiles={handleFiles}
+            onDropFiles={handleFiles}
+            canExport={results.length > 0}
+            canExportPng={currentRaw !== null}
+            autoDownloadPng={autoDownloadPng}
+            onDownloadCsv={handleDownloadCsv}
+            onToggleAutoDownloadPng={handleToggleAutoDownloadPng}
+          />
+          <InfoPanel
+            errors={effectiveErrors}
+            fileName={currentEntry?.fileName ?? null}
+            resultCount={results.length}
+            zoomIndex={settings.zoomIndex}
+          />
+        </div>
 
         <section className="chart-area">
           {/* Progress line above the chart. */}
@@ -527,14 +537,6 @@ export default function App() {
           )}
 
           <QueueList queue={queue} />
-
-          <ExportPanel
-            canExport={results.length > 0}
-            canExportPng={currentRaw !== null}
-            autoDownloadPng={autoDownloadPng}
-            onDownloadCsv={handleDownloadCsv}
-            onToggleAutoDownloadPng={handleToggleAutoDownloadPng}
-          />
 
           <NotificationPanel notices={notices} />
         </section>

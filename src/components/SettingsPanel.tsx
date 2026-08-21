@@ -1,5 +1,5 @@
 import React from "react";
-import { ZOOM_PERCENTAGES } from "../types";
+import ExportPanel from "./ExportPanel";
 import type { DisplaySettings } from "../types";
 
 type Props = {
@@ -7,25 +7,36 @@ type Props = {
   onSettingsChange: (next: DisplaySettings) => void;
   onSelectFiles: (files: File[]) => void;
   onDropFiles: (files: File[]) => void;
-  errors: string[];
-  fileName: string | null;
-  /** Number of results accumulated (confirmed + canceled) so far. */
-  resultCount: number;
+  /** True when at least one confirmed or canceled result is available. */
+  canExport: boolean;
+  /** True when a file is loaded and a chart is rendered. */
+  canExportPng: boolean;
+  /** True when auto-PNG-on-confirm is armed. */
+  autoDownloadPng: boolean;
+  onDownloadCsv: () => void;
+  onToggleAutoDownloadPng: () => void;
 };
 
 /**
- * Presentational settings panel: file picker + dropzone, gain/offset/trim
- * inputs, and the error list. All state lives in App; this component
- * only formats DOM events into settings-change callbacks.
+ * Presentational settings panel: file Imports, Exports, and the
+ * measurement controls (Trigger gain, offset, time trim, wave
+ * velocity, peak search width). All state lives in App; this
+ * component only formats DOM events into settings-change callbacks.
+ *
+ * The time-trim and wave-velocity controls are wrapped in bordered
+ * subsections so the checkbox + dependent inputs read as one
+ * activation toggle rather than three independent fields.
  */
 export default function SettingsPanel({
   settings,
   onSettingsChange,
   onSelectFiles,
   onDropFiles,
-  errors,
-  fileName,
-  resultCount,
+  canExport,
+  canExportPng,
+  autoDownloadPng,
+  onDownloadCsv,
+  onToggleAutoDownloadPng,
 }: Props) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -37,7 +48,9 @@ export default function SettingsPanel({
     <aside className="settings-panel">
       <h2 className="settings-title">Settings</h2>
 
+      {/* Imports: file picker + dropzone. */}
       <section className="settings-section">
+        <h3 className="settings-section-heading">Imports</h3>
         {/* Hidden native file input triggered by the button click. */}
         <button
           type="button"
@@ -80,9 +93,23 @@ export default function SettingsPanel({
         </div>
       </section>
 
+      {/* Exports: results CSV download + PNG auto-save toggle, moved
+          out of the chart area so all I/O controls sit together. */}
+      <section className="settings-section">
+        <ExportPanel
+          canExport={canExport}
+          canExportPng={canExportPng}
+          autoDownloadPng={autoDownloadPng}
+          onDownloadCsv={onDownloadCsv}
+          onToggleAutoDownloadPng={onToggleAutoDownloadPng}
+        />
+      </section>
+
+      {/* Top-level measurement controls that don't activate dependent
+          inputs: Trigger gain, offset correction, peak search width. */}
       <section className="settings-section">
         <label className="field">
-          <span className="field-label">Amplitude gain</span>
+          <span className="field-label">Trigger gain</span>
           <input
             type="number"
             step="any"
@@ -104,81 +131,6 @@ export default function SettingsPanel({
           <span>Subtract initial voltage (offset correction)</span>
         </label>
 
-        <label className="field field-row">
-          <input
-            type="checkbox"
-            checked={settings.trimEnabled}
-            onChange={(e) => update({ trimEnabled: e.target.checked })}
-          />
-          <span>Enable time trimming</span>
-        </label>
-
-        <label className="field">
-          <span className="field-label">Trim start (µs)</span>
-          <input
-            type="number"
-            step="any"
-            disabled={!settings.trimEnabled}
-            value={settings.trimStartUs}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              update({ trimStartUs: Number.isFinite(v) ? v : 0 });
-            }}
-          />
-        </label>
-
-        <label className="field">
-          <span className="field-label">Trim end (µs)</span>
-          <input
-            type="number"
-            step="any"
-            disabled={!settings.trimEnabled}
-            value={settings.trimEndUs}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              update({ trimEndUs: Number.isFinite(v) ? v : 0 });
-            }}
-          />
-        </label>
-
-        <label className="field field-row">
-          <input
-            type="checkbox"
-            checked={settings.velocityEnabled}
-            onChange={(e) => update({ velocityEnabled: e.target.checked })}
-          />
-          <span>Enable wave velocity calculation</span>
-        </label>
-
-        <label className="field">
-          <span className="field-label">Distance (mm)</span>
-          <input
-            type="number"
-            step="any"
-            min="0"
-            disabled={!settings.velocityEnabled}
-            value={settings.distanceMm}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              update({ distanceMm: Number.isFinite(v) && v >= 0 ? v : 0 });
-            }}
-          />
-        </label>
-
-        <label className="field">
-          <span className="field-label">System delay correction (us)</span>
-          <input
-            type="number"
-            step="any"
-            disabled={!settings.velocityEnabled}
-            value={settings.systemDelayUs}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              update({ systemDelayUs: Number.isFinite(v) ? v : 0 });
-            }}
-          />
-        </label>
-
         <label className="field">
           <span className="field-label">Peak search width (µs)</span>
           <input
@@ -196,35 +148,92 @@ export default function SettingsPanel({
         </label>
       </section>
 
+      {/* Time trimming: checkbox + start/end inputs sit in one bordered
+          group so the activation toggle and its dependent fields are
+          visually tied together. */}
       <section className="settings-section">
-        <h3 className="errors-heading">Errors</h3>
-        {/* Empty error list shows a friendly placeholder. */}
-        {errors.length === 0 ? (
-          <p className="errors-empty">No errors.</p>
-        ) : (
-          <ul className="errors-list">
-            {errors.map((msg, i) => (
-              <li key={i}>{msg}</li>
-            ))}
-          </ul>
-        )}
-      </section>
+        <div className="settings-subsection">
+          <h3 className="settings-subsection-heading">Time trimming</h3>
+          <label className="field field-row">
+            <input
+              type="checkbox"
+              checked={settings.trimEnabled}
+              onChange={(e) => update({ trimEnabled: e.target.checked })}
+            />
+            <span>Enable time trimming</span>
+          </label>
 
-      <section className="settings-section">
-        <p className="file-name-label">Loaded file</p>
-        <p className="file-name">{fileName ?? "None"}</p>
-        <p className="file-name-label">Results collected</p>
-        <p className="file-name">{resultCount}</p>
-      </section>
+          <label className="field">
+            <span className="field-label">Trim start (µs)</span>
+            <input
+              type="number"
+              step="any"
+              disabled={!settings.trimEnabled}
+              value={settings.trimStartUs}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                update({ trimStartUs: Number.isFinite(v) ? v : 0 });
+              }}
+            />
+          </label>
 
-      <section className="settings-section">
-        <p className="zoom-label">
-          Zoom:{" "}
-          {Math.round(
-            (ZOOM_PERCENTAGES[settings.zoomIndex] ?? 1) * 100,
-          )}
-          % (press Z)
-        </p>
+          <label className="field">
+            <span className="field-label">Trim end (µs)</span>
+            <input
+              type="number"
+              step="any"
+              disabled={!settings.trimEnabled}
+              value={settings.trimEndUs}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                update({ trimEndUs: Number.isFinite(v) ? v : 0 });
+              }}
+            />
+          </label>
+        </div>
+
+        {/* Wave velocity: same bordered-group treatment for the
+            checkbox + distance + system-delay fields. */}
+        <div className="settings-subsection">
+          <h3 className="settings-subsection-heading">Wave velocity</h3>
+          <label className="field field-row">
+            <input
+              type="checkbox"
+              checked={settings.velocityEnabled}
+              onChange={(e) => update({ velocityEnabled: e.target.checked })}
+            />
+            <span>Enable wave velocity calculation</span>
+          </label>
+
+          <label className="field">
+            <span className="field-label">Distance (mm)</span>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              disabled={!settings.velocityEnabled}
+              value={settings.distanceMm}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                update({ distanceMm: Number.isFinite(v) && v >= 0 ? v : 0 });
+              }}
+            />
+          </label>
+
+          <label className="field">
+            <span className="field-label">System delay correction (us)</span>
+            <input
+              type="number"
+              step="any"
+              disabled={!settings.velocityEnabled}
+              value={settings.systemDelayUs}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                update({ systemDelayUs: Number.isFinite(v) ? v : 0 });
+              }}
+            />
+          </label>
+        </div>
       </section>
     </aside>
   );
