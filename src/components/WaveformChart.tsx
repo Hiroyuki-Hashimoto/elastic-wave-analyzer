@@ -123,6 +123,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       xMax,
       display.transmitterV,
       triggerMarkers,
+      triggerRef.current?.clientWidth ?? 800,
     );
     const receiverOpts = buildOptions(
       "Receiver",
@@ -131,6 +132,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       xMax,
       display.receiverV,
       receiverMarkers,
+      receiverRef.current?.clientWidth ?? 800,
     );
 
     // Always destroy previous instances before creating new ones to
@@ -163,6 +165,41 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       destroyPlots(receiverPlotRef, receiverRef);
     };
   }, [display, picker, zoomIndex]);
+
+  // Watch the chart-host elements and call uPlot.setSize whenever the
+  // container width changes (window resize, tab switch, settings panel
+  // growth, etc). uPlot does not auto-observe its host, so without this
+  // the chart would stay at whatever width it was first built with and
+  // leave empty space on the right of wide panels. Runs once on mount
+  // and disconnects both observers on unmount.
+  useEffect(() => {
+    const handleResize = (
+      plotRef: { current: UPlot | null },
+      entries: ResizeObserverEntry[],
+    ) => {
+      const width = entries[0]?.contentRect.width;
+      // Skip the 0-width transition frames some browsers emit before the
+      // host is laid out; setSize with 0 would crash uPlot's canvas math.
+      if (width && width > 0 && plotRef.current) {
+        // uPlot.setSize requires both width and height; reuse the plot's
+        // current height so future height tweaks still propagate.
+        const height = plotRef.current.rect.height;
+        plotRef.current.setSize({ width, height });
+      }
+    };
+    const triggerObs = new ResizeObserver((entries) =>
+      handleResize(triggerPlotRef, entries),
+    );
+    const receiverObs = new ResizeObserver((entries) =>
+      handleResize(receiverPlotRef, entries),
+    );
+    if (triggerRef.current) triggerObs.observe(triggerRef.current);
+    if (receiverRef.current) receiverObs.observe(receiverRef.current);
+    return () => {
+      triggerObs.disconnect();
+      receiverObs.disconnect();
+    };
+  }, []);
 
   /**
    * Attach mousedown + contextmenu listeners to the uPlot overlay div
@@ -287,6 +324,7 @@ function buildOptions(
   xMax: number,
   values: number[],
   markers: ChartMarkers,
+  width: number,
 ): UPlot.Options {
   // Compute y-axis bounds from finite values only; guard against flat data.
   const ys = values.filter(Number.isFinite);
@@ -307,7 +345,7 @@ function buildOptions(
   const timeUsScale = "time-us";
   return {
     title,
-    width: 800,
+    width,
     height: 260,
     series: [
       {
