@@ -27,13 +27,57 @@ export const RESULTS_CSV_HEADER = [
 ] as const;
 
 /** Decimal precision for time / delta-T columns (µs). */
-const TIME_DECIMALS = 1;
+export const TIME_DECIMALS = 1;
 /** Decimal precision for voltage columns (V). */
-const VOLTAGE_DECIMALS = 6;
+export const VOLTAGE_DECIMALS = 6;
 /** Decimal precision for velocity columns (m/s). */
-const VELOCITY_DECIMALS = 3;
+export const VELOCITY_DECIMALS = 3;
 /** Decimal precision for the distance setting column (mm). */
-const DISTANCE_DECIMALS = 3;
+export const DISTANCE_DECIMALS = 3;
+
+/**
+ * Format a nullable numeric cell: null/undefined/NaN become an empty
+ * field, finite numbers are fixed to the requested decimal precision.
+ * Shared between exportResultsCsv and formatAnalysisResultCells so the
+ * CSV file and the in-app results table stay byte-identical.
+ */
+export function formatNumberCell(
+  value: number | null | undefined,
+  decimals: number,
+): string {
+  if (value === null || value === undefined) return "";
+  if (!Number.isFinite(value)) return "";
+  return value.toFixed(decimals);
+}
+
+/**
+ * Format one AnalysisResult as the 16 string cells in CSV header
+ * order. Cell 0 is the file name (CSV-escaped); the rest are numeric
+ * cells formatted with the column-specific decimal precision. Returns
+ * the cells in the same order as RESULTS_CSV_HEADER so callers can
+ * zip them with the header. Used by both the CSV exporter and the
+ * in-app results table.
+ */
+export function formatAnalysisResultCells(r: AnalysisResult): string[] {
+  return [
+    escapeCsvField(r.fileName),
+    formatNumberCell(r.triggerStsTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.triggerStsVoltageV, VOLTAGE_DECIMALS),
+    formatNumberCell(r.triggerPtpTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.triggerPtpVoltageV, VOLTAGE_DECIMALS),
+    formatNumberCell(r.receiverStsTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.receiverStsVoltageV, VOLTAGE_DECIMALS),
+    formatNumberCell(r.receiverPtpTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.receiverPtpVoltageV, VOLTAGE_DECIMALS),
+    formatNumberCell(r.stsPropagationTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.ptpPropagationTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.stsPropagationTimeCorrectedUs, TIME_DECIMALS),
+    formatNumberCell(r.ptpPropagationTimeCorrectedUs, TIME_DECIMALS),
+    formatNumberCell(r.stsVelocityMps, VELOCITY_DECIMALS),
+    formatNumberCell(r.ptpVelocityMps, VELOCITY_DECIMALS),
+    formatNumberCell(r.distanceMm, DISTANCE_DECIMALS),
+  ];
+}
 
 /**
  * Serialize an array of AnalysisResult rows into the exact header / row
@@ -46,42 +90,11 @@ export function exportResultsCsv(results: AnalysisResult[]): string {
   const lines: string[] = [];
   lines.push(RESULTS_CSV_HEADER.join(","));
   for (const r of results) {
-    const row = [
-      escapeCsvField(r.fileName),
-      formatNumberCell(r.triggerStsTimeUs, TIME_DECIMALS),
-      formatNumberCell(r.triggerStsVoltageV, VOLTAGE_DECIMALS),
-      formatNumberCell(r.triggerPtpTimeUs, TIME_DECIMALS),
-      formatNumberCell(r.triggerPtpVoltageV, VOLTAGE_DECIMALS),
-      formatNumberCell(r.receiverStsTimeUs, TIME_DECIMALS),
-      formatNumberCell(r.receiverStsVoltageV, VOLTAGE_DECIMALS),
-      formatNumberCell(r.receiverPtpTimeUs, TIME_DECIMALS),
-      formatNumberCell(r.receiverPtpVoltageV, VOLTAGE_DECIMALS),
-      formatNumberCell(r.stsPropagationTimeUs, TIME_DECIMALS),
-      formatNumberCell(r.ptpPropagationTimeUs, TIME_DECIMALS),
-      formatNumberCell(r.stsPropagationTimeCorrectedUs, TIME_DECIMALS),
-      formatNumberCell(r.ptpPropagationTimeCorrectedUs, TIME_DECIMALS),
-      formatNumberCell(r.stsVelocityMps, VELOCITY_DECIMALS),
-      formatNumberCell(r.ptpVelocityMps, VELOCITY_DECIMALS),
-      formatNumberCell(r.distanceMm, DISTANCE_DECIMALS),
-    ];
-    lines.push(row.join(","));
+    lines.push(formatAnalysisResultCells(r).join(","));
   }
   // Trailing newline keeps the file POSIX-friendly and avoids editors
   // warning about the last line missing a terminator.
   return lines.join("\n") + "\n";
-}
-
-/**
- * Format a nullable numeric cell: null/undefined/NaN become an empty
- * field, finite numbers are fixed to the requested decimal precision.
- */
-function formatNumberCell(
-  value: number | null | undefined,
-  decimals: number,
-): string {
-  if (value === null || value === undefined) return "";
-  if (!Number.isFinite(value)) return "";
-  return value.toFixed(decimals);
 }
 
 /**

@@ -444,6 +444,78 @@ body,
   color: var(--danger);
 }
 
+.results-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin: 0;
+}
+
+.results-tab-button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.results-tab-button:hover {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.results-tab-button.active {
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+  /* Overlap the .results-tabs border so the active tab appears to sit
+     flush against the panel below. */
+  margin-bottom: -1px;
+  border-bottom: 1px solid var(--panel);
+}
+
+.results-table-wrapper {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.results-table th,
+.results-table td {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.results-table th {
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 600;
+  /* Keep the header visible while the user scrolls vertically through
+     long result lists. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.results-table-filename {
+  word-break: break-all;
+  white-space: normal;
+  max-width: 200px;
+}
+
 @media (max-width: 760px) {
   .app-main {
     grid-template-columns: 1fr;
