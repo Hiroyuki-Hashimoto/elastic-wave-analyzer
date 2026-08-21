@@ -113,10 +113,19 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     const fullSpan = time[time.length - 1] - xMin;
     const xMax = xMin + fullSpan * ratio;
 
+    // Receiver signals are typically a few mV, so the y axis is shown in
+    // mV for readability. Scale the V array into mV once here and pass
+    // the same scaled array to both the uPlot data (which drives the
+    // rendered trace and the auto-ranged y axis) and buildOptions
+    // (which uses it only for an internal y-bounds sanity check).
+    // Internal DisplayWaveform.receiverV stays in V so PickPoint.voltage,
+    // the CSV exporter, and click snapping keep their V-based semantics.
+    const receiverVm = display.receiverV.map((v) => v * 1000);
+
     // uPlot.AlignedData: first array is the shared x-axis, later arrays
     // are the y values per series.
     const triggerData: UPlot.AlignedData = [time, display.transmitterV];
-    const receiverData: UPlot.AlignedData = [time, display.receiverV];
+    const receiverData: UPlot.AlignedData = [time, receiverVm];
 
     const triggerMarkers = {
       sts: picker.triggerSts,
@@ -138,10 +147,10 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     );
     const receiverOpts = buildOptions(
       "Receiver",
-      "Receiver (V)",
+      "Receiver (mV)",
       xMin,
       xMax,
-      display.receiverV,
+      receiverVm,
       receiverMarkers,
       receiverRef.current?.clientWidth ?? 800,
     );
