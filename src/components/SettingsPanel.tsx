@@ -18,18 +18,19 @@ type Props = {
 };
 
 /**
- * Presentational settings panel laid out in two columns (560px wide
- * overall). All sections use a 2-column grid:
- *   - Imports: file button + dropzone side by side
- *   - Exports: results CSV + PNG auto-save side by side
- *   - Measurement controls: Subtract initial voltage and Trigger gain
- *     stacked in column 1; Peak search width and the two bordered
- *     subsections in column 2; Wave velocity spans both columns at
- *     the bottom so the Distance / System-delay inputs have room.
+ * Presentational settings panel laid out in three blocks:
+ *   1. A 2-column row with Imports on the left (Select + Drop stacked
+ *      vertically) and Exports on the right.
+ *   2. A measurement-controls grid where Subtract initial voltage and
+ *      Trigger gain stack in column 1 (Subtract directly above
+ *      Trigger gain) and Peak search width sits in column 2.
+ *   3. A 2-column row with Time trimming and Wave velocity bordered
+ *      subsections side by side so their Enable toggles read as
+ *      parallel options.
  *
- * The time-trim and wave-velocity controls are wrapped in bordered
- * subsections so the checkbox + dependent inputs read as one
- * activation toggle rather than three independent fields.
+ * The time-trim and wave-velocity controls keep their bordered
+ * sub-group treatment so each checkbox + dependent inputs reads as
+ * one activation toggle.
  */
 export default function SettingsPanel({
   settings,
@@ -52,64 +53,68 @@ export default function SettingsPanel({
     <aside className="settings-panel">
       <h2 className="settings-title">Settings</h2>
 
-      {/* Imports: file button and dropzone side by side. */}
+      {/* Block 1: Imports (left) + Exports (right) in a 2-column row. */}
       <section className="settings-section-grid-2">
-        <button
-          type="button"
-          className="file-button"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          Select CSV file(s)
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv,text/csv"
-          multiple
-          className="file-input-hidden"
-          onChange={(e) => {
-            const list = e.target.files;
-            if (list && list.length > 0) {
-              onSelectFiles(Array.from(list));
-            }
-            // Reset value so selecting the same file twice still fires.
-            e.target.value = "";
-          }}
-        />
-        <div
-          className="dropzone"
-          onDragOver={(e) => {
-            // preventDefault is required to allow subsequent drop.
-            e.preventDefault();
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            const list = e.dataTransfer.files;
-            if (list && list.length > 0) {
-              onDropFiles(Array.from(list));
-            }
-          }}
-        >
-          Drop CSV file(s) here
+        <div className="settings-section-stack">
+          <h3 className="settings-section-heading">Imports</h3>
+          {/* Hidden native file input triggered by the button click. */}
+          <button
+            type="button"
+            className="file-button"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Select CSV file(s)
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            multiple
+            className="file-input-hidden"
+            onChange={(e) => {
+              const list = e.target.files;
+              if (list && list.length > 0) {
+                onSelectFiles(Array.from(list));
+              }
+              // Reset value so selecting the same file twice still fires.
+              e.target.value = "";
+            }}
+          />
+          {/* Dropzone: accept drag-and-drop of one or more CSV files. */}
+          <div
+            className="dropzone"
+            onDragOver={(e) => {
+              // preventDefault is required to allow subsequent drop.
+              e.preventDefault();
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const list = e.dataTransfer.files;
+              if (list && list.length > 0) {
+                onDropFiles(Array.from(list));
+              }
+            }}
+          >
+            Drop CSV file(s) here
+          </div>
+        </div>
+
+        <div className="settings-section-stack">
+          <h3 className="settings-section-heading">Exports</h3>
+          <ExportPanel
+            canExport={canExport}
+            canExportPng={canExportPng}
+            autoDownloadPng={autoDownloadPng}
+            onDownloadCsv={onDownloadCsv}
+            onToggleAutoDownloadPng={onToggleAutoDownloadPng}
+          />
         </div>
       </section>
 
-      {/* Exports: results CSV download and PNG auto-save side by side. */}
-      <section className="settings-section-grid-2">
-        <ExportPanel
-          canExport={canExport}
-          canExportPng={canExportPng}
-          autoDownloadPng={autoDownloadPng}
-          onDownloadCsv={onDownloadCsv}
-          onToggleAutoDownloadPng={onToggleAutoDownloadPng}
-        />
-      </section>
-
-      {/* Measurement controls in a 2-column grid. Column 1 stacks
-          Subtract initial voltage on top of Trigger gain; column 2
-          holds Peak search width above the Time trimming subsection;
-          Wave velocity spans both columns at the bottom. */}
-      <section className="settings-section-grid-2 settings-measurement-grid">
+      {/* Block 2: measurement controls. Subtract initial voltage and
+          Trigger gain stack in column 1; Peak search width sits in
+          column 2 row 1, leaving row 2 column 2 empty. */}
+      <section className="settings-measurement-grid">
         <label className="field field-row grid-c1-r1">
           <input
             type="checkbox"
@@ -148,8 +153,11 @@ export default function SettingsPanel({
             }}
           />
         </label>
+      </section>
 
-        <div className="settings-subsection grid-c2-r2">
+      {/* Block 3: Time trimming and Wave velocity side by side. */}
+      <section className="settings-section-grid-2">
+        <div className="settings-subsection">
           <h3 className="settings-subsection-heading">Time trimming</h3>
           <label className="field field-row">
             <input
@@ -189,7 +197,7 @@ export default function SettingsPanel({
           </label>
         </div>
 
-        <div className="settings-subsection grid-span2-r3">
+        <div className="settings-subsection">
           <h3 className="settings-subsection-heading">Wave velocity</h3>
           <label className="field field-row">
             <input

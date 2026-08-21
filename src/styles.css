@@ -112,6 +112,14 @@ body,
   color: var(--text);
 }
 
+/* Vertical stack inside one cell of a 2-column section, e.g. the
+   Imports column where Select / Drop sit one above the other. */
+.settings-section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .settings-subsection {
   display: flex;
   flex-direction: column;
@@ -138,7 +146,7 @@ body,
   align-self: start;
 }
 
-.info-panel {
+.notifications-errors-panel {
   /* Fixed width matching the widened Settings column so the two frames
      align cleanly when stacked vertically. The vertical scroll keeps
      the merged Errors + Notifications log manageable during long
@@ -155,13 +163,13 @@ body,
   gap: 14px;
 }
 
-.info-title {
+.notifications-errors-title {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
 }
 
-.info-section {
+.notifications-errors-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -469,33 +477,19 @@ body,
   color: var(--muted);
 }
 
-.notification-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.notification-heading {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.notification-empty {
+.notifications-errors-empty {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
 }
 
-.notification-list {
+.notifications-errors-list {
   margin: 0;
   padding-left: 18px;
   font-size: 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 220px;
-  overflow-y: auto;
 }
 
 .notification-item {

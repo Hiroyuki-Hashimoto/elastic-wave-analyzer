@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import InfoPanel from "./components/InfoPanel";
+import NotificationsErrorsPanel from "./components/NotificationsErrorsPanel";
 import ResultsTable from "./components/ResultsTable";
 import SettingsPanel from "./components/SettingsPanel";
 import WaveformChart, {
@@ -470,11 +470,8 @@ export default function App() {
             onDownloadCsv={handleDownloadCsv}
             onToggleAutoDownloadPng={handleToggleAutoDownloadPng}
           />
-          <InfoPanel
+          <NotificationsErrorsPanel
             errors={effectiveErrors}
-            fileName={currentEntry?.fileName ?? null}
-            resultCount={results.length}
-            zoomIndex={settings.zoomIndex}
             notices={notices}
           />
         </div>
