@@ -102,6 +102,16 @@ export type PickerState = {
 };
 
 /**
+ * Frozen reference consumed by the overlay: the last confirmed file's
+ * display plus its four picks, used both for the faded traces and for
+ * the dashed pick guides / Δ annotations drawn beside the live ones.
+ */
+export type PrevOverlay = {
+  display: DisplayWaveform;
+  picks: PickerState;
+};
+
+/**
  * Seven zoom levels cycled by the Z key; values are the fraction of the
  * original x-range that remains visible (left boundary is preserved).
  */

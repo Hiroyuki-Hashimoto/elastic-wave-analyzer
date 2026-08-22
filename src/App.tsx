@@ -30,6 +30,7 @@ import {
   type PickKind,
   type PickPoint,
   type PickerState,
+  type PrevOverlay,
   type RawWaveform,
   type VelocityConfig,
 } from "./types";
@@ -96,11 +97,9 @@ export default function App() {
   // the same precomputed value without re-scanning the array.
   const [dTUs, setDrtUs] = useState<number | null>(null);
   // Display frozen at the last Enter-confirm, redrawn faded on both
-  // charts when the overlay toggle is armed. Cleared when a fresh
-  // batch of files loads so references never cross sessions.
-  const [prevWaveform, setPrevWaveform] = useState<DisplayWaveform | null>(
-    null,
-  );
+  // charts when the overlay toggle is armed (traces plus dashed pick
+  // guides and Δ labels). Cleared when a fresh batch of files loads.
+  const [prevOverlay, setPrevOverlay] = useState<PrevOverlay | null>(null);
 
   // Re-derive the display waveform whenever the current file or settings change.
   useEffect(() => {
@@ -293,7 +292,7 @@ export default function App() {
       // Clear previous file-level errors when starting a new load.
       setErrors([]);
       // New session: drop any previous-file overlay reference.
-      setPrevWaveform(null);
+      setPrevOverlay(null);
       const entries: QueueEntry[] = [];
       for (const f of files) {
         // eslint-disable-next-line no-await-in-loop
@@ -490,10 +489,33 @@ export default function App() {
           }
         }
         recordResult(picker, true, velocityConfig);
-        // Freeze the just-confirmed display as the reference overlay for
-        // the following files (mirrors the Python analyzer's close()).
-        if (goodDisplayRef.current) {
-          setPrevWaveform(goodDisplayRef.current);
+        // Freeze the just-confirmed display and its picks as the
+        // reference overlay for the following files (mirrors the Python
+        // analyzer's close()); Escape never touches this snapshot.
+        const {
+          triggerSts,
+          triggerPtp,
+          receiverSts,
+          receiverPtp,
+        } = picker;
+        if (
+          goodDisplayRef.current &&
+          triggerSts &&
+          triggerPtp &&
+          receiverSts &&
+          receiverPtp
+        ) {
+          setPrevOverlay({
+            display: goodDisplayRef.current,
+            picks: {
+              triggerSts,
+              triggerPtp,
+              receiverSts,
+              receiverPtp,
+              isConfirmed: false,
+              isCanceled: false,
+            },
+          });
         }
         const msg = buildConfirmMessage(currentRaw.fileName, result);
         if (msg) addNotice("success", msg);
@@ -599,8 +621,8 @@ export default function App() {
                   peakWidthUs={settings.peakWidthUs}
                   dTUs={dTUs ?? 0}
                   zoomIndex={settings.zoomIndex}
-                  prevSeries={
-                    settings.overlayPrevEnabled ? prevWaveform : null
+                  prevOverlay={
+                    settings.overlayPrevEnabled ? prevOverlay : null
                   }
                 />
               ) : (
