@@ -26,6 +26,9 @@ const FALLBACK_CHART_HEIGHT = 284;
 /** Gap between the cursor crosshair point and the bare readout text. */
 const TOOLTIP_GAP_PX = 6;
 
+/** Gap between a pick marker's vertical line and its right-aligned label. */
+const MARKER_LABEL_GAP_PX = 7;
+
 /** Granularity of the per-chart scrollbar: integer steps 0..SCROLL_STEPS. */
 const SCROLL_STEPS = 1000;
 import type {
@@ -632,6 +635,9 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
   ctx.lineWidth = 1;
   ctx.font = "11px sans-serif";
   ctx.textBaseline = "top";
+  // Right-align labels so they end one character width left of their
+  // marker line instead of hugging it.
+  ctx.textAlign = "right";
   // Clip to the plot box so markers outside the scrolled window cannot
   // bleed over the axes or gutters.
   ctx.beginPath();
@@ -649,8 +655,12 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     ctx.lineTo(x, bottom);
     ctx.stroke();
     ctx.fillStyle = "#d62728";
-    ctx.fillText("STS", x + 4, top + 4);
-    ctx.fillText(`${formatPick(markers.sts)} µs`, x + 4, top + 18);
+    ctx.fillText("STS", x - MARKER_LABEL_GAP_PX, top + 4);
+    ctx.fillText(
+      `${formatPick(markers.sts)} µs`,
+      x - MARKER_LABEL_GAP_PX,
+      top + 18,
+    );
   }
   // PTP marker: green vertical line, two-line label pushed below STS so
   // the two annotations never visually collide.
@@ -662,8 +672,12 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     ctx.lineTo(x, bottom);
     ctx.stroke();
     ctx.fillStyle = "#2ca02c";
-    ctx.fillText("PTP", x + 4, top + 34);
-    ctx.fillText(`${formatPick(markers.ptp)} µs`, x + 4, top + 48);
+    ctx.fillText("PTP", x - MARKER_LABEL_GAP_PX, top + 34);
+    ctx.fillText(
+      `${formatPick(markers.ptp)} µs`,
+      x - MARKER_LABEL_GAP_PX,
+      top + 48,
+    );
   }
   ctx.restore();
 }
