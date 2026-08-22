@@ -374,14 +374,39 @@ body,
   will-change: transform;
 }
 
-/* Horizontal pan bar under each zoomable chart. A thin native range
-   input; disabled at 100% zoom where nothing is hidden. The top margin
-   keeps daylight between the x-axis label row and the thumb. */
+/* Chart titles rendered as plain DOM above each host (uPlot runs
+   title-less) so root height always equals the canvas height. */
+.chart-title {
+  margin: 0 0 4px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  line-height: 1.5;
+}
+
+/* Native horizontal scrollbar under each zoomable chart: an overflow
+   container with an oversized spacer, so the thumb matches every other
+   scrollbar in the app and its length mirrors the visible ratio. At
+   100% zoom the spacer fills the track (no thumb) and input is off.
+   position+z-index keeps the bar interactive even if a chart ever
+   spills past its host again. */
 .chart-scrollbar {
-  width: 100%;
+  position: relative;
+  z-index: 5;
+  height: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
   margin-top: 10px;
   flex-shrink: 0;
-  accent-color: var(--accent);
+}
+
+.chart-scrollbar-spacer {
+  height: 1px;
+}
+
+.chart-scrollbar.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .empty-state {

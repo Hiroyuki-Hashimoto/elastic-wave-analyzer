@@ -3,7 +3,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
-  type FormEvent,
+  useState,
   type RefObject,
 } from "react";
 import UPlot from "uplot";
@@ -13,7 +13,7 @@ import {
   findTriggerPtpIndex,
 } from "../lib/picker";
 import { resampleOnto } from "../lib/waveform";
-import { ZOOM_PERCENTAGES } from "../types";
+import { ZOOM_PERCENTAGES, type PrevOverlay } from "../types";
 
 /**
  * Fallback CSS-pixel height for both plots, used only when the flex
@@ -28,9 +28,6 @@ const TOOLTIP_GAP_PX = 6;
 
 /** Gap between a pick marker's vertical line and its right-aligned label. */
 const MARKER_LABEL_GAP_PX = 7;
-
-/** Granularity of the per-chart scrollbar: integer steps 0..SCROLL_STEPS. */
-const SCROLL_STEPS = 1000;
 import type {
   DisplayWaveform,
   PickAxis,
@@ -50,10 +47,11 @@ type Props = {
   /** Index into ZOOM_PERCENTAGES; the visible x-range shrinks accordingly. */
   zoomIndex: number;
   /**
-   * Last confirmed display to draw faded behind both live traces as a
-   * reference; null renders nothing. Frozen at its capture-time scaling.
+   * Last confirmed analysis to draw faded behind both live traces as a
+   * reference (traces plus dashed pick guides and Δ labels); null
+   * renders nothing. Frozen at its capture-time scaling.
    */
-  prevSeries?: DisplayWaveform | null;
+  prevOverlay?: PrevOverlay | null;
 };
 
 /**
@@ -79,7 +77,7 @@ export type WaveformChartHandle = {
  * listeners are removed on the same lifecycle to avoid leaks.
  */
 const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformChartImpl(
-  { display, picker, onPick, peakWidthUs, dTUs, zoomIndex, prevSeries },
+  { display, picker, onPick, peakWidthUs, dTUs, zoomIndex, prevOverlay },
   ref,
 ) {
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -119,9 +117,13 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
   // re-render-free; uPlot pans via imperative setScale instead.
   const triggerFracRef = useRef(0);
   const receiverFracRef = useRef(0);
-  // Uncontrolled range inputs; programmatic resets write to their DOM.
-  const triggerBarRef = useRef<HTMLInputElement>(null);
-  const receiverBarRef = useRef<HTMLInputElement>(null);
+  // Scroll-proxy containers whose native horizontal bar pans the chart;
+  // programmatic resets (Z key) write scrollLeft directly.
+  const triggerBarRef = useRef<HTMLDivElement>(null);
+  const receiverBarRef = useRef<HTMLDivElement>(null);
+  // Measured host width drives the scrollbar spacer so the native thumb
+  // size reflects the visible-to-total ratio.
+  const [trackW, setTrackW] = useState(0);
   // Previous zoom level: only a zoom change (Z key) snaps both charts
   // back to the left edge, never picks / Enter / file advances.
   const prevZoomRef = useRef(zoomIndex);
@@ -154,18 +156,16 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     const trigWin = windowFor(xMin, fullSpan, ratio, triggerFracRef.current);
     const recvWin = windowFor(xMin, fullSpan, ratio, receiverFracRef.current);
 
-    // Sync the uncontrolled sliders to the refs (e.g. after a Z reset)
-    // so thumb positions always match what the plots are showing.
-    if (triggerBarRef.current) {
-      triggerBarRef.current.value = String(
-        Math.round(triggerFracRef.current * SCROLL_STEPS),
-      );
-    }
-    if (receiverBarRef.current) {
-      receiverBarRef.current.value = String(
-        Math.round(receiverFracRef.current * SCROLL_STEPS),
-      );
-    }
+    // Sync the uncontrolled bars' scroll positions from the refs (e.g.
+    // after a Z reset); the resulting scroll event recomputes the same
+    // fraction, so no pan feedback loop occurs.
+    const syncBar = (bar: HTMLDivElement | null, frac: number) => {
+      if (!bar) return;
+      const maxScroll = bar.scrollWidth - bar.clientWidth;
+      if (maxScroll > 0) bar.scrollLeft = frac * maxScroll;
+    };
+    syncBar(triggerBarRef.current, triggerFracRef.current);
+    syncBar(receiverBarRef.current, receiverFracRef.current);
 
     // Receiver signals are typically a few mV, so the y axis is shown in
     // mV for readability. Scale the V array into mV once here and pass
@@ -179,12 +179,13 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     // Overlay series: resample the stored previous trace onto the
     // current axis; nulls outside its span render as uPlot gaps. The
     // receiver overlay shares the live trace's mV scaling.
-    const hasPrev = !!prevSeries && prevSeries.timeUs.length > 0;
+    const prevDisp = prevOverlay?.display ?? null;
+    const hasPrev = !!prevDisp && prevDisp.timeUs.length > 0;
     const prevTx = hasPrev
-      ? resampleOnto(time, prevSeries!.timeUs, prevSeries!.transmitterV)
+      ? resampleOnto(time, prevDisp!.timeUs, prevDisp!.transmitterV)
       : null;
     const prevRxRaw = hasPrev
-      ? resampleOnto(time, prevSeries!.timeUs, prevSeries!.receiverV)
+      ? resampleOnto(time, prevDisp!.timeUs, prevDisp!.receiverV)
       : null;
     const prevRx = prevRxRaw
       ? prevRxRaw.map((v) => (v == null ? null : v * 1000))
@@ -206,10 +207,19 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     const triggerMarkers = {
       sts: picker.triggerSts,
       ptp: picker.triggerPtp,
+      // Reference pick times drive dashed guides and Δ label lines.
+      prevStsTimeUs:
+        hasPrev ? prevOverlay!.picks.triggerSts?.timeUs ?? null : null,
+      prevPtpTimeUs:
+        hasPrev ? prevOverlay!.picks.triggerPtp?.timeUs ?? null : null,
     };
     const receiverMarkers = {
       sts: picker.receiverSts,
       ptp: picker.receiverPtp,
+      prevStsTimeUs:
+        hasPrev ? prevOverlay!.picks.receiverSts?.timeUs ?? null : null,
+      prevPtpTimeUs:
+        hasPrev ? prevOverlay!.picks.receiverPtp?.timeUs ?? null : null,
     };
 
     // Hosts are flex-sized by CSS; read their real pixel heights so the
@@ -221,7 +231,6 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       receiverRef.current?.clientHeight || FALLBACK_CHART_HEIGHT;
 
     const triggerOpts = buildOptions(
-      "Trigger (with gain)",
       "Trigger (V)",
       "V",
       trigWin.min,
@@ -233,7 +242,6 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       prevTx ?? undefined,
     );
     const receiverOpts = buildOptions(
-      "Receiver",
       "Receiver (mV)",
       "mV",
       recvWin.min,
@@ -274,7 +282,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       destroyPlots(triggerPlotRef, triggerRef);
       destroyPlots(receiverPlotRef, receiverRef);
     };
-  }, [display, picker, zoomIndex, prevSeries]);
+  }, [display, picker, zoomIndex, prevOverlay]);
 
   // Watch the chart-host elements and call uPlot.setSize whenever the
   // container width changes (window resize, tab switch, settings panel
@@ -297,6 +305,12 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       const rect = entries[0]?.contentRect;
       const width = rect?.width;
       const height = rect?.height;
+      // Publish integer-px width changes for spacer sizing; the
+      // functional update skips renders while unchanged.
+      if (width != null && width > 0) {
+        const px = Math.round(width);
+        setTrackW((prev) => (prev === px ? prev : px));
+      }
       if (
         plotRef.current &&
         width != null && width > 0 &&
@@ -399,21 +413,24 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
   }
 
   // Scrollbars enable only when a zoom level actually hides part of the
-  // span; at 100% they stay mounted but disabled for a stable layout.
+  // span; at 100% they stay mounted but inert for a stable layout.
   const ratioNow = ZOOM_PERCENTAGES[zoomIndex] ?? ZOOM_PERCENTAGES[0];
   const spanPannable =
     !!display &&
     display.timeUs.length >= 2 &&
     display.timeUs[display.timeUs.length - 1] > display.timeUs[0];
   const scrollable = spanPannable && ratioNow < 1;
+  // Spacer width makes the native thumb proportional to the visible
+  // share; at 100% it collapses to the track width (no thumb).
+  const spacerWidth =
+    scrollable && trackW > 0 ? Math.round(trackW / ratioNow) : "100%";
 
-  /** Slider input: store the fraction and pan that chart only. */
-  function handleScrollInput(
-    axis: PickAxis,
-    e: FormEvent<HTMLInputElement>,
-  ) {
-    const frac = Number(e.currentTarget.value) / SCROLL_STEPS;
-    // Guard malformed events; windowFor clamps again defensively.
+  /** Native scroll event: derive the window fraction and pan that chart. */
+  function handleBarScroll(axis: PickAxis, el: HTMLDivElement) {
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    // Not actually scrollable (100% zoom): ignore stray events.
+    if (maxScroll <= 0) return;
+    const frac = el.scrollLeft / maxScroll;
     if (!Number.isFinite(frac)) return;
     if (axis === "trigger") triggerFracRef.current = frac;
     else receiverFracRef.current = frac;
@@ -445,21 +462,28 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
   return (
     <div className="chart-stack">
       <div className="chart-block">
+        {/* DOM title keeps uPlot title-less: its built-in .u-title div
+            would add ~27 px above the canvas and overflow the flex-sized
+            host, covering the scrollbar with the transparent .u-over. */}
+        <div className="chart-title">Trigger (with gain)</div>
         <div className="chart-host" ref={triggerRef} />
         <ChartScrollbar
           axis="trigger"
           barRef={triggerBarRef}
           disabled={!scrollable}
-          onInput={handleScrollInput}
+          spacerWidth={spacerWidth}
+          onScroll={handleBarScroll}
         />
       </div>
       <div className="chart-block">
+        <div className="chart-title">Receiver</div>
         <div className="chart-host" ref={receiverRef} />
         <ChartScrollbar
           axis="receiver"
           barRef={receiverBarRef}
           disabled={!scrollable}
-          onInput={handleScrollInput}
+          spacerWidth={spacerWidth}
+          onScroll={handleBarScroll}
         />
       </div>
     </div>
@@ -471,30 +495,44 @@ export default WaveformChart;
 type ChartMarkers = {
   sts: PickPoint | null;
   ptp: PickPoint | null;
+  /** Reference-run pick times driving dashed guides and Δ label lines. */
+  prevStsTimeUs: number | null;
+  prevPtpTimeUs: number | null;
 };
 
 type ChartScrollbarProps = {
   axis: PickAxis;
-  barRef: RefObject<HTMLInputElement>;
+  barRef: RefObject<HTMLDivElement>;
   disabled: boolean;
-  onInput: (axis: PickAxis, e: FormEvent<HTMLInputElement>) => void;
+  /** Spacer px width; the string "100%" collapses the thumb at 100%. */
+  spacerWidth: number | string;
+  onScroll: (axis: PickAxis, el: HTMLDivElement) => void;
 };
 
-/** Thin native range input that pans one chart's visible x window. */
-function ChartScrollbar({ axis, barRef, disabled, onInput }: ChartScrollbarProps) {
+/**
+ * Real overflow container whose oversized spacer surfaces the browser's
+ * native horizontal scrollbar — the same UI as every other scroll
+ * region in the app. Scrolling it pans the chart via onScroll.
+ */
+function ChartScrollbar({
+  axis,
+  barRef,
+  disabled,
+  spacerWidth,
+  onScroll,
+}: ChartScrollbarProps) {
   return (
-    <input
+    <div
       ref={barRef}
-      type="range"
-      className="chart-scrollbar"
-      min={0}
-      max={SCROLL_STEPS}
-      step={1}
-      defaultValue={0}
-      disabled={disabled}
+      className={`chart-scrollbar${disabled ? " is-disabled" : ""}`}
       aria-label={`Pan ${axis === "trigger" ? "Trigger" : "Receiver"} chart horizontally`}
-      onInput={(e) => onInput(axis, e)}
-    />
+      onScroll={(e) => onScroll(axis, e.currentTarget)}
+    >
+      <div
+        className="chart-scrollbar-spacer"
+        style={{ width: spacerWidth }}
+      />
+    </div>
   );
 }
 
@@ -524,7 +562,6 @@ function windowFor(
  * in the chart and survive PNG export later.
  */
 function buildOptions(
-  title: string,
   yAxisLabel: string,
   unit: string,
   winMin: number,
@@ -554,10 +591,12 @@ function buildOptions(
   // as a Unix-epoch time axis. time:false marks it as plain numeric.
   const timeUsScale = "time-us";
   return {
-    title,
     width,
     height,
     // Native legend is off: a bare two-line cursor tooltip replaces it.
+    // The chart title is a plain DOM div ABOVE the host (see JSX) —
+    // keeping uPlot title-less makes root height == canvas height, so
+    // the plot can never spill over the scrollbar below it.
     legend: { show: false },
     series: [
       {
@@ -621,11 +660,20 @@ function buildOptions(
 }
 
 /**
- * Draw STS (red) and PTP (green) vertical markers and time annotations
- * onto the uPlot series canvas using uPlot's valToPos mapping.
+ * Draw faint dashed vertical guides at the reference run's pick times
+ * first (overlay only), then the live STS (red) and PTP (green) marker
+ * lines with right-aligned labels. When a reference pick exists for a
+ * slot, its label gains a third "(Δ x.x µs)" line reporting how far the
+ * live pick sits from the reference one — mirroring the Python
+ * analyzer's annotation style.
  */
 function drawMarkers(u: UPlot, markers: ChartMarkers) {
-  if (!markers.sts && !markers.ptp) return;
+  const hasAny =
+    markers.sts ||
+    markers.ptp ||
+    markers.prevStsTimeUs != null ||
+    markers.prevPtpTimeUs != null;
+  if (!hasAny) return;
   const ctx = u.ctx;
   // bbox is the plot drawing area in canvas pixels.
   const top = u.bbox.top;
@@ -644,10 +692,31 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
   ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
   ctx.clip();
 
-  // STS marker: red vertical line with a 2-line label (kind on line 1,
-  // time value on line 2) anchored near the top axis.
+  // Reference guides: same hue as the traces at low alpha, dotted so
+  // they cannot be mistaken for live picks; drawn before live elements.
+  if (markers.prevStsTimeUs != null || markers.prevPtpTimeUs != null) {
+    ctx.strokeStyle = "rgba(31, 119, 180, 0.35)";
+    ctx.setLineDash([4, 4]);
+    for (const t of [markers.prevStsTimeUs, markers.prevPtpTimeUs]) {
+      if (t == null) continue;
+      // valToPos(dataValue, scaleKey, canvasPixels=true) → pixel x.
+      const x = u.valToPos(t, "time-us", true);
+      ctx.beginPath();
+      ctx.moveTo(x, top);
+      ctx.lineTo(x, bottom);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  const LINE_H = 14;
+  const gx = -MARKER_LABEL_GAP_PX;
+  // PTP stacks below STS; start where the original fixed layout put it
+  // and push down whenever the STS block grows a Δ line.
+  let ptpTop = top + 34;
+
+  // STS marker: red vertical line with a right-aligned label stack.
   if (markers.sts) {
-    // valToPos(dataValue, scaleKey, canvasPixels=true) → canvas pixel x.
     const x = u.valToPos(markers.sts.timeUs, "time-us", true);
     ctx.strokeStyle = "#d62728";
     ctx.beginPath();
@@ -655,15 +724,18 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     ctx.lineTo(x, bottom);
     ctx.stroke();
     ctx.fillStyle = "#d62728";
-    ctx.fillText("STS", x - MARKER_LABEL_GAP_PX, top + 4);
-    ctx.fillText(
-      `${formatPick(markers.sts)} µs`,
-      x - MARKER_LABEL_GAP_PX,
-      top + 18,
-    );
+    let ly = top + 4;
+    ctx.fillText("STS", x + gx, ly); ly += LINE_H;
+    ctx.fillText(`${formatPick(markers.sts)} µs`, x + gx, ly); ly += LINE_H;
+    if (markers.prevStsTimeUs != null) {
+      const d = markers.sts.timeUs - markers.prevStsTimeUs;
+      ctx.fillText(`(Δ ${fmtDelta(d)} µs)`, x + gx, ly); ly += LINE_H;
+    }
+    // Preserve the original 2 px breathing room below the stack.
+    ptpTop = Math.max(ptpTop, ly + 2);
   }
-  // PTP marker: green vertical line, two-line label pushed below STS so
-  // the two annotations never visually collide.
+  // PTP marker: green vertical line, label pushed below STS so the two
+  // annotations never visually collide.
   if (markers.ptp) {
     const x = u.valToPos(markers.ptp.timeUs, "time-us", true);
     ctx.strokeStyle = "#2ca02c";
@@ -672,14 +744,20 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     ctx.lineTo(x, bottom);
     ctx.stroke();
     ctx.fillStyle = "#2ca02c";
-    ctx.fillText("PTP", x - MARKER_LABEL_GAP_PX, top + 34);
-    ctx.fillText(
-      `${formatPick(markers.ptp)} µs`,
-      x - MARKER_LABEL_GAP_PX,
-      top + 48,
-    );
+    let ly = ptpTop;
+    ctx.fillText("PTP", x + gx, ly); ly += LINE_H;
+    ctx.fillText(`${formatPick(markers.ptp)} µs`, x + gx, ly); ly += LINE_H;
+    if (markers.prevPtpTimeUs != null) {
+      const d = markers.ptp.timeUs - markers.prevPtpTimeUs;
+      ctx.fillText(`(Δ ${fmtDelta(d)} µs)`, x + gx, ly); ly += LINE_H;
+    }
   }
   ctx.restore();
+}
+
+/** Signed delta text; explicit sign keeps the shift direction obvious. */
+function fmtDelta(d: number): string {
+  return `${d >= 0 ? "+" : "-"}${Math.abs(d).toFixed(1)}`;
 }
 
 /** Format a pick's timeUs to one decimal place; "--" for unset points. */
