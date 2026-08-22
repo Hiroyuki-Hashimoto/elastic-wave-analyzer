@@ -176,17 +176,9 @@ body,
   display: flex;
   flex-direction: column;
   gap: 16px;
-  align-self: start;
 }
 
 .notifications-errors-panel {
-  /* Fixed width matching the widened Settings column so the two frames
-     align cleanly when stacked vertically. The vertical scroll keeps
-     the merged Errors + Notifications log manageable during long
-     sessions without growing the page. */
-  width: 560px;
-  max-height: 60vh;
-  overflow-y: auto;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -194,6 +186,12 @@ body,
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* First to shrink when vertical space runs out (viewport-fit mode):
+     the log scrolls internally while Settings keeps its full size.
+     The small floor keeps the frame recognizable when squeezed. */
+  flex: 0 1 auto;
+  min-height: 72px;
+  overflow-y: auto;
 }
 
 .notifications-errors-title {
@@ -311,12 +309,30 @@ body,
   border-radius: 6px;
   padding: 12px;
   min-width: 0;
+  /* Fill the grid cell's full height so the two charts absorb whatever
+     vertical space the viewport offers (viewport-fit mode); when the
+     charts hit their floor heights the area scrolls internally. */
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Fixed-height furniture above/below the charts must never yield its
+   pixels when the viewport gets short; the chart blocks flex instead. */
+.progress-label,
+.results-tabs,
+.pick-guidance,
+.queue-list {
+  flex-shrink: 0;
 }
 
 .chart-stack {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* Absorb the leftover height between the fixed furniture rows. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .chart-block {
@@ -324,10 +340,20 @@ body,
   border-radius: 4px;
   padding: 8px;
   background: #ffffff;
+  /* Equal shares of the leftover height, floored at 200 px so traces
+     stay readable; below that floor the chart area scrolls instead. */
+  flex: 1 1 0;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
 }
 
 .chart-host {
   width: 100%;
+  /* uPlot canvas fills this box: WaveformChart reads clientHeight at
+     build time and tracks ResizeObserver updates afterwards. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Bare two-line hover readout ("12.34 (us)" / "4.56 (V)") that hugs
@@ -354,6 +380,7 @@ body,
 .chart-scrollbar {
   width: 100%;
   margin-top: 4px;
+  flex-shrink: 0;
   accent-color: var(--accent);
 }
 
@@ -431,7 +458,7 @@ body,
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 200px;
+  max-height: 120px;
   overflow-y: auto;
 }
 
@@ -640,5 +667,37 @@ body,
 @media (max-width: 760px) {
   .app-main {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Viewport-fit mode for wide screens: lock the shell to the window so
+   the page itself never scrolls; inner panels scroll instead. Narrow
+   screens (<761px) keep the natural flowing single-column layout. */
+@media (min-width: 761px) {
+  .app-shell {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Flex child of the locked shell: without this floor reset the main
+     row could not shrink below its content and would re-introduce the
+     page scrollbar we just removed. */
+  .app-main {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Left column spans the full working height; when even the shrunken
+     log cannot fit, the column scrolls internally as a last resort. */
+  .settings-column {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /* Results table fills the tab area instead of the fixed 60vh cap. */
+  .results-table-wrapper {
+    flex: 1 1 auto;
+    min-height: 160px;
+    max-height: none;
   }
 }

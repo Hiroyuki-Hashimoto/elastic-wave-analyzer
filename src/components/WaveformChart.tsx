@@ -15,19 +15,12 @@ import {
 import { ZOOM_PERCENTAGES } from "../types";
 
 /**
- * Fixed CSS-pixel height for both the Trigger and Receiver plots.
- * Shared between the initial buildOptions (so the very first frame is
- * already at this height) and the ResizeObserver (which must NOT read
- * the canvas height back from uPlot, since uPlot.rect returns the
- * .u-over overlay's bounding rect, sized to plotHgtCss = full height
- * minus axis / title space; using that would shrink the chart on
- * every observer tick).
- *
- * 284 instead of 260: the native legend row is gone entirely and the
- * bare cursor tooltip floats over the plot, so its ~24 px row below
- * the canvas is reclaimed into the plot area here.
+ * Fallback CSS-pixel height for both plots, used only when the flex
+ * sized host cannot be measured yet. The real height comes from the
+ * host's clientHeight at build time and from ResizeObserver updates
+ * afterwards, so the charts share the viewport-driven layout height.
  */
-const CHART_HEIGHT = 284;
+const FALLBACK_CHART_HEIGHT = 284;
 
 /** Gap between the cursor crosshair point and the bare readout text. */
 const TOOLTIP_GAP_PX = 6;
@@ -188,12 +181,21 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       ptp: picker.receiverPtp,
     };
 
+    // Hosts are flex-sized by CSS; read their real pixel heights so the
+    // canvases fill the viewport-driven boxes. Falls back only when a
+    // host is not measurable (e.g. display:none on first commit).
+    const trigH =
+      triggerRef.current?.clientHeight || FALLBACK_CHART_HEIGHT;
+    const recvH =
+      receiverRef.current?.clientHeight || FALLBACK_CHART_HEIGHT;
+
     const triggerOpts = buildOptions(
       "Trigger (with gain)",
       "Trigger (V)",
       "V",
       trigWin.min,
       trigWin.max,
+      trigH,
       display.transmitterV,
       triggerMarkers,
       triggerRef.current?.clientWidth ?? 800,
@@ -204,6 +206,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       "mV",
       recvWin.min,
       recvWin.max,
+      recvH,
       receiverVm,
       receiverMarkers,
       receiverRef.current?.clientWidth ?? 800,
@@ -251,16 +254,22 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       plotRef: { current: UPlot | null },
       entries: ResizeObserverEntry[],
     ) => {
-      const width = entries[0]?.contentRect.width;
-      // Skip the 0-width transition frames some browsers emit before the
-      // host is laid out; setSize with 0 would crash uPlot's canvas math.
-      if (width && width > 0 && plotRef.current) {
-        // Use CHART_HEIGHT instead of plotRef.current.rect.height: the
-        // .rect getter returns the .u-over overlay's bounding rect, which
-        // uPlot sizes to plotHgtCss (opts.height minus axis / title space,
-        // about 50px less than the canvas). Passing that to setSize would
-        // shrink the canvas on the very first observer tick.
-        plotRef.current.setSize({ width, height: CHART_HEIGHT });
+      // Host box drives BOTH axes: width tracks the column width and
+      // height tracks the viewport-fit flex layout. Skip the 0-size
+      // transition frames some browsers emit before layout settles;
+      // setSize with 0 would crash uPlot's canvas math. Reading the
+      // HOST's contentRect is correct here — plot.rect returns the
+      // .u-over bbox, which excludes axis/title space and would shrink
+      // the canvas every tick.
+      const rect = entries[0]?.contentRect;
+      const width = rect?.width;
+      const height = rect?.height;
+      if (
+        plotRef.current &&
+        width != null && width > 0 &&
+        height != null && height > 0
+      ) {
+        plotRef.current.setSize({ width, height });
       }
     };
     const triggerObs = new ResizeObserver((entries) =>
@@ -487,6 +496,7 @@ function buildOptions(
   unit: string,
   winMin: number,
   winMax: number,
+  height: number,
   values: number[],
   markers: ChartMarkers,
   width: number,
@@ -511,7 +521,7 @@ function buildOptions(
   return {
     title,
     width,
-    height: CHART_HEIGHT,
+    height,
     // Native legend is off: a bare two-line cursor tooltip replaces it.
     legend: { show: false },
     series: [
