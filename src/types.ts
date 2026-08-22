@@ -15,6 +15,13 @@ export type DisplaySettings = {
   trimEndUs: number;
   /** Half-width of the search window for PTP peak detection, in µs. */
   peakWidthUs: number;
+  /** When true, Trigger STS/PTP picks are derived automatically (see below). */
+  triggerAutoEnabled: boolean;
+  /**
+   * Crossing level for automatic Trigger STS detection, compared against
+   * the displayed Transmitter voltage (after offset correction and gain).
+   */
+  triggerThresholdV: number;
   /** Index into ZOOM_PERCENTAGES; the visible x-range shrinks accordingly. */
   zoomIndex: number;
   /** When true, Enter-confirm computes STS/PTP velocities and emits them in CSV. */
@@ -114,6 +121,10 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   // PTP peak detection window half-width. ~10 kHz, so one full cycle
   // is ~100 µs and the half-period is ~50 µs. Adjustable in Settings.
   peakWidthUs: 50,
+  // Trigger auto-detection starts disabled; 0.1 V suits low-gain views
+  // and is raised by the user when noise triggers earlier than the pulse.
+  triggerAutoEnabled: false,
+  triggerThresholdV: 0.1,
   // Start at 100% zoom (full x-range visible).
   zoomIndex: 0,
   // Wave velocity is off by default; 100 mm / 0 µs match common lab setups.

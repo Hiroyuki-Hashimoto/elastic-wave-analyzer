@@ -11,6 +11,9 @@ type Props = {
  *      Peak search width in column 2 row 1.
  *   2. Time trimming and Wave velocity bordered subsections side by
  *      side so their Enable toggles read as parallel options.
+ *   3. Trigger auto-detection (Enable toggle + Threshold) as a left
+ *      half bordered subsection below them, keeping trigger-related
+ *      controls grouped toward the left of the panel.
  *
  * The file picker, dropzone, results CSV download, and PNG auto-save
  * toggle have moved to ImportsExportsPanel.
@@ -68,7 +71,8 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
         </label>
       </section>
 
-      {/* Time trimming and Wave velocity side by side. */}
+      {/* Time trimming and Wave velocity side by side; the Trigger
+          auto-detection frame below reuses the left half of row 2. */}
       <section className="settings-section-grid-2">
         <div className="settings-subsection">
           <h3 className="settings-subsection-heading">Time trimming</h3>
@@ -146,6 +150,39 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
               onChange={(e) => {
                 const v = Number(e.target.value);
                 update({ systemDelayUs: Number.isFinite(v) ? v : 0 });
+              }}
+            />
+          </label>
+        </div>
+
+        {/* Trigger auto-detection: when armed, App re-derives the Trigger
+            STS/PTP picks from the threshold crossing. As the third grid
+            child it flows to row 2 column 1 (left half), keeping all
+            trigger-related controls grouped on the panel's left side. */}
+        <div className="settings-subsection">
+          <h3 className="settings-subsection-heading">Trigger auto-detection</h3>
+
+          <label className="field field-row">
+            <input
+              type="checkbox"
+              checked={settings.triggerAutoEnabled}
+              onChange={(e) => update({ triggerAutoEnabled: e.target.checked })}
+            />
+            <span>Enable trigger auto-detection</span>
+          </label>
+
+          <label className="field">
+            <span className="field-label">Threshold (V)</span>
+            <input
+              type="number"
+              step="any"
+              disabled={!settings.triggerAutoEnabled}
+              value={settings.triggerThresholdV}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                // Non-finite input falls back to 0; negative levels stay
+                // allowed so bipolar traces can be detected on the rise.
+                update({ triggerThresholdV: Number.isFinite(v) ? v : 0 });
               }}
             />
           </label>

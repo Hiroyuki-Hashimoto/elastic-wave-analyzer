@@ -103,6 +103,16 @@ existing plot).
   (default `20`).
 - **Subtract initial voltage (offset correction)** — subtracts each
   series' first value from the whole series (default on).
+- **Peak search width (µs)** — half-width of the window used to find
+  PTP peak samples (default `50`).
+- **Enable trigger auto-detection** — derives the Trigger STS pick
+  automatically from the first displayed Transmitter sample at or above
+  the threshold, then derives the Trigger PTP the same way a manual
+  left click does. Re-runs whenever a relevant setting changes while
+  enabled; manual Receiver picks are never touched (default off).
+- **Threshold (V)** — crossing level compared against the displayed
+  (gain-applied) Trigger voltage, not the raw CSV volts
+  (default `0.1`).
 - **Enable time trimming** — restricts the displayed range
   (default off).
 - **Trim start (µs)** / **Trim end (µs)** — inclusive trim window

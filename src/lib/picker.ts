@@ -37,6 +37,26 @@ export function findNearestSampleIndex(
 }
 
 /**
+ * Find the first Trigger STS index where the displayed voltage reaches
+ * a threshold (rising-edge crossing). Values are the gain/offset-applied
+ * Transmitter samples, so thresholdV is compared on the chart's scale.
+ * Returns -1 for empty input or when no sample reaches the threshold.
+ */
+export function findTriggerStsByThreshold(
+  values: number[],
+  thresholdV: number,
+): number {
+  if (!Array.isArray(values) || values.length === 0) return -1;
+  // A non-finite threshold can never be reached by finite samples.
+  if (!Number.isFinite(thresholdV)) return -1;
+  for (let i = 0; i < values.length; i++) {
+    // First sample at or above the level counts as the pulse start.
+    if (values[i] >= thresholdV) return i;
+  }
+  return -1;
+}
+
+/**
  * Find the Trigger PTP index using a µs-width window-peak search.
  * The first index i where values[i] is the maximum over the window
  * [i - W/2, i + W/2] (clamped to array bounds) is returned. W in

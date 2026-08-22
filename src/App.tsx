@@ -6,7 +6,12 @@ import SettingsPanel from "./components/SettingsPanel";
 import WaveformChart, {
   type WaveformChartHandle,
 } from "./components/WaveformChart";
-import { emptyPickerState, pickerToAnalysisResult } from "./lib/picker";
+import {
+  emptyPickerState,
+  findTriggerPtpIndex,
+  findTriggerStsByThreshold,
+  pickerToAnalysisResult,
+} from "./lib/picker";
 import { downloadResultsCsv, exportChartPng } from "./lib/exporter";
 import {
   buildDisplayWaveform,
@@ -128,6 +133,62 @@ export default function App() {
       { id: noticeIdRef.current, kind, text },
     ]);
   }, []);
+
+  // Trigger auto-detection: while armed, derive the Trigger STS pick from
+  // the first displayed sample at/above the threshold and derive PTP with
+  // the same window-peak search a manual left click uses. chartDisplay
+  // already rebuilds on gain / offset / trim / file changes, so listing it
+  // as a dependency re-runs detection on every relevant settings change.
+  useEffect(() => {
+    // Disarmed or no drawable data: leave picks untouched so the user
+    // can pick the Trigger axis manually instead.
+    if (!settings.triggerAutoEnabled || !chartDisplay) return;
+    if (chartDisplay.timeUs.length === 0 || dTUs === null) return;
+
+    const time = chartDisplay.timeUs;
+    const values = chartDisplay.transmitterV;
+    const stsIdx = findTriggerStsByThreshold(
+      values,
+      settings.triggerThresholdV,
+    );
+    if (stsIdx === -1) {
+      // Armed but never crossed: clear stale trigger picks so the axis
+      // stays fully automatic, and say why no marker appeared.
+      setPicker((prev) => ({ ...prev, triggerSts: null, triggerPtp: null }));
+      addNotice(
+        "warning",
+        `Trigger auto-detect: threshold ${settings.triggerThresholdV} V not reached.`,
+      );
+      return;
+    }
+    // PTP mirrors a manual left click: window-peak search over the trace.
+    const ptpIdx = findTriggerPtpIndex(values, settings.peakWidthUs, dTUs);
+    setPicker((prev) => ({
+      ...prev,
+      isConfirmed: false,
+      triggerSts: {
+        axis: "trigger",
+        kind: "sts",
+        index: stsIdx,
+        timeUs: time[stsIdx],
+        voltage: values[stsIdx],
+      },
+      triggerPtp: {
+        axis: "trigger",
+        kind: "ptp",
+        index: ptpIdx,
+        timeUs: time[ptpIdx],
+        voltage: values[ptpIdx],
+      },
+    }));
+  }, [
+    chartDisplay,
+    dTUs,
+    settings.triggerAutoEnabled,
+    settings.triggerThresholdV,
+    settings.peakWidthUs,
+    addNotice,
+  ]);
 
   /**
    * Parse one file into a queue entry, recording either a parsed raw
