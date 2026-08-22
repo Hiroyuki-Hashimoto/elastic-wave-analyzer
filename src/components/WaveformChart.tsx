@@ -12,6 +12,7 @@ import {
   findReceiverPtpIndex,
   findTriggerPtpIndex,
 } from "../lib/picker";
+import { resampleOnto } from "../lib/waveform";
 import { ZOOM_PERCENTAGES } from "../types";
 
 /**
@@ -45,6 +46,11 @@ type Props = {
   dTUs: number;
   /** Index into ZOOM_PERCENTAGES; the visible x-range shrinks accordingly. */
   zoomIndex: number;
+  /**
+   * Last confirmed display to draw faded behind both live traces as a
+   * reference; null renders nothing. Frozen at its capture-time scaling.
+   */
+  prevSeries?: DisplayWaveform | null;
 };
 
 /**
@@ -70,7 +76,7 @@ export type WaveformChartHandle = {
  * listeners are removed on the same lifecycle to avoid leaks.
  */
 const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformChartImpl(
-  { display, picker, onPick, peakWidthUs, dTUs, zoomIndex },
+  { display, picker, onPick, peakWidthUs, dTUs, zoomIndex, prevSeries },
   ref,
 ) {
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -167,10 +173,32 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     // the CSV exporter, and click snapping keep their V-based semantics.
     const receiverVm = display.receiverV.map((v) => v * 1000);
 
+    // Overlay series: resample the stored previous trace onto the
+    // current axis; nulls outside its span render as uPlot gaps. The
+    // receiver overlay shares the live trace's mV scaling.
+    const hasPrev = !!prevSeries && prevSeries.timeUs.length > 0;
+    const prevTx = hasPrev
+      ? resampleOnto(time, prevSeries!.timeUs, prevSeries!.transmitterV)
+      : null;
+    const prevRxRaw = hasPrev
+      ? resampleOnto(time, prevSeries!.timeUs, prevSeries!.receiverV)
+      : null;
+    const prevRx = prevRxRaw
+      ? prevRxRaw.map((v) => (v == null ? null : v * 1000))
+      : null;
+
     // uPlot.AlignedData: first array is the shared x-axis, later arrays
-    // are the y values per series.
-    const triggerData: UPlot.AlignedData = [time, display.transmitterV];
-    const receiverData: UPlot.AlignedData = [time, receiverVm];
+    // are the y values per series (optional faded overlay last).
+    const triggerData: UPlot.AlignedData = [
+      time,
+      display.transmitterV,
+      ...(prevTx ? [prevTx] : []),
+    ];
+    const receiverData: UPlot.AlignedData = [
+      time,
+      receiverVm,
+      ...(prevRx ? [prevRx] : []),
+    ];
 
     const triggerMarkers = {
       sts: picker.triggerSts,
@@ -199,6 +227,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       display.transmitterV,
       triggerMarkers,
       triggerRef.current?.clientWidth ?? 800,
+      prevTx ?? undefined,
     );
     const receiverOpts = buildOptions(
       "Receiver",
@@ -210,6 +239,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       receiverVm,
       receiverMarkers,
       receiverRef.current?.clientWidth ?? 800,
+      prevRx ?? undefined,
     );
 
     // Always destroy previous instances before creating new ones to
@@ -241,7 +271,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       destroyPlots(triggerPlotRef, triggerRef);
       destroyPlots(receiverPlotRef, receiverRef);
     };
-  }, [display, picker, zoomIndex]);
+  }, [display, picker, zoomIndex, prevSeries]);
 
   // Watch the chart-host elements and call uPlot.setSize whenever the
   // container width changes (window resize, tab switch, settings panel
@@ -500,6 +530,8 @@ function buildOptions(
   values: number[],
   markers: ChartMarkers,
   width: number,
+  /** Faded previous-trace series; omitted when the overlay is off. */
+  prevValues?: (number | null)[],
 ): UPlot.Options {
   // Compute y-axis bounds from finite values only; guard against flat data.
   const ys = values.filter(Number.isFinite);
@@ -536,6 +568,20 @@ function buildOptions(
         stroke: "#1f77b4",
         points: { show: false },
       },
+      // Faded copy of the previously confirmed trace, same hue at ~30%
+      // alpha so it reads as a reference rather than live data. uPlot
+      // skips its null entries, leaving gaps outside the stored span.
+      ...(prevValues
+        ? [
+            {
+              label: "Previous",
+              scale: "y",
+              width: 1,
+              stroke: "rgba(31, 119, 180, 0.30)",
+              points: { show: false },
+            } as UPlot.Series,
+          ]
+        : []),
     ],
     axes: [
       {

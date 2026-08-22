@@ -98,6 +98,52 @@ function stripTrailingComma(s: string): string {
 }
 
 /**
+ * Resample a previous trace onto the current time axis by linear
+ * interpolation. Returns one entry per currentTimeUs sample; null marks
+ * points outside the previous trace's span so uPlot renders gaps there.
+ * Both time arrays must be strictly increasing (CSV validation already
+ * guarantees this for parsed waveforms); a two-pointer walk keeps it
+ * linear in n + m.
+ */
+export function resampleOnto(
+  currentTimeUs: number[],
+  prevTimeUs: number[],
+  prevValues: number[],
+): (number | null)[] {
+  const out: (number | null)[] = new Array(currentTimeUs.length).fill(null);
+  if (
+    currentTimeUs.length === 0 ||
+    prevTimeUs.length === 0 ||
+    prevTimeUs.length !== prevValues.length
+  ) {
+    return out;
+  }
+  let j = 0;
+  for (let i = 0; i < currentTimeUs.length; i++) {
+    const t = currentTimeUs[i];
+    // Advance j until prev[j] >= t; stop early past the previous span.
+    while (j < prevTimeUs.length && prevTimeUs[j] < t) j++;
+    if (j >= prevTimeUs.length) break;
+    if (prevTimeUs[j] === t) {
+      // Exact grid hit: copy the stored sample directly.
+      out[i] = prevValues[j];
+      continue;
+    }
+    if (j === 0) continue;
+    const t0 = prevTimeUs[j - 1];
+    const t1 = prevTimeUs[j];
+    // Guard against zero-width segments even though validation rules
+    // them out, so a bad caller can never divide by zero here.
+    if (!(t1 > t0)) continue;
+    const v0 = prevValues[j - 1];
+    const v1 = prevValues[j];
+    // Linear interpolation between the two bracketing samples.
+    out[i] = v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
+  }
+  return out;
+}
+
+/**
  * Apply display settings (gain, offset, trim) to a RawWaveform and
  * return the DisplayWaveform consumed by the chart.
  *

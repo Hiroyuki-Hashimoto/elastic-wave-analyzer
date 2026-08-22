@@ -95,6 +95,12 @@ export default function App() {
   // Held alongside the display so future modules (e.g. LPF) can reuse
   // the same precomputed value without re-scanning the array.
   const [dTUs, setDrtUs] = useState<number | null>(null);
+  // Display frozen at the last Enter-confirm, redrawn faded on both
+  // charts when the overlay toggle is armed. Cleared when a fresh
+  // batch of files loads so references never cross sessions.
+  const [prevWaveform, setPrevWaveform] = useState<DisplayWaveform | null>(
+    null,
+  );
 
   // Re-derive the display waveform whenever the current file or settings change.
   useEffect(() => {
@@ -286,6 +292,8 @@ export default function App() {
       if (files.length === 0) return;
       // Clear previous file-level errors when starting a new load.
       setErrors([]);
+      // New session: drop any previous-file overlay reference.
+      setPrevWaveform(null);
       const entries: QueueEntry[] = [];
       for (const f of files) {
         // eslint-disable-next-line no-await-in-loop
@@ -482,6 +490,11 @@ export default function App() {
           }
         }
         recordResult(picker, true, velocityConfig);
+        // Freeze the just-confirmed display as the reference overlay for
+        // the following files (mirrors the Python analyzer's close()).
+        if (goodDisplayRef.current) {
+          setPrevWaveform(goodDisplayRef.current);
+        }
         const msg = buildConfirmMessage(currentRaw.fileName, result);
         if (msg) addNotice("success", msg);
         // Auto-PNG: snapshot the current chart when the toggle is on.
@@ -586,6 +599,9 @@ export default function App() {
                   peakWidthUs={settings.peakWidthUs}
                   dTUs={dTUs ?? 0}
                   zoomIndex={settings.zoomIndex}
+                  prevSeries={
+                    settings.overlayPrevEnabled ? prevWaveform : null
+                  }
                 />
               ) : (
                 <div className="empty-state">

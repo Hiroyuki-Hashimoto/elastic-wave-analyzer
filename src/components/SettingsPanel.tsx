@@ -7,8 +7,8 @@ type Props = {
 
 /**
  * Settings panel holds only the per-measurement controls:
- *   1. Subtract initial voltage and Trigger gain stacked in column 1,
- *      Peak search width in column 2 row 1.
+ *   1. Subtract initial voltage and Trigger gain stacked in column 1;
+ *      Overlay previous waveform and Peak search width in column 2.
  *   2. Time trimming and Wave velocity bordered subsections side by
  *      side so their Enable toggles read as parallel options.
  *   3. Trigger auto-detection (Enable toggle + Threshold) as a left
@@ -28,8 +28,8 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
       <h2 className="settings-title">Settings</h2>
 
       {/* Measurement controls. Subtract initial voltage and Trigger
-          gain stack in column 1; Peak search width sits in column 2
-          row 1, leaving row 2 column 2 empty. */}
+          gain stack in column 1; the overlay toggle and Peak search
+          width stack in column 2. */}
       <section className="settings-measurement-grid">
         <label className="field field-row grid-c1-r1">
           <input
@@ -38,6 +38,17 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
             onChange={(e) => update({ offsetEnabled: e.target.checked })}
           />
           <span>Subtract initial voltage (offset correction)</span>
+        </label>
+
+        {/* Previous-waveform overlay: draws the last confirmed file's
+            traces faded behind the live ones on both charts. */}
+        <label className="field field-row grid-c2-r1">
+          <input
+            type="checkbox"
+            checked={settings.overlayPrevEnabled}
+            onChange={(e) => update({ overlayPrevEnabled: e.target.checked })}
+          />
+          <span>Overlay previous waveform</span>
         </label>
 
         <label className="field grid-c1-r2">
@@ -54,7 +65,7 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           />
         </label>
 
-        <label className="field grid-c2-r1">
+        <label className="field grid-c2-r2">
           <span className="field-label">Peak search width (µs)</span>
           <input
             type="number"

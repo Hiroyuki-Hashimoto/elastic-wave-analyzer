@@ -15,6 +15,11 @@ export type DisplaySettings = {
   trimEndUs: number;
   /** Half-width of the search window for PTP peak detection, in µs. */
   peakWidthUs: number;
+  /**
+   * When true, the last confirmed file's Trigger/Receiver traces are
+   * redrawn faded behind the live ones as a visual reference.
+   */
+  overlayPrevEnabled: boolean;
   /** When true, Trigger STS/PTP picks are derived automatically (see below). */
   triggerAutoEnabled: boolean;
   /**
@@ -121,6 +126,9 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   // PTP peak detection window half-width. ~10 kHz, so one full cycle
   // is ~100 µs and the half-period is ~50 µs. Adjustable in Settings.
   peakWidthUs: 50,
+  // Previous-waveform overlay starts off; it only has content after
+  // the first Enter-confirmed file anyway.
+  overlayPrevEnabled: false,
   // Trigger auto-detection starts disabled; 0.1 V suits low-gain views
   // and is raised by the user when noise triggers earlier than the pulse.
   triggerAutoEnabled: false,
