@@ -692,22 +692,29 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
   ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
   ctx.clip();
 
-  // Reference guides: same hue as the traces at low alpha, dotted so
-  // they cannot be mistaken for live picks; drawn before live elements.
-  if (markers.prevStsTimeUs != null || markers.prevPtpTimeUs != null) {
-    ctx.strokeStyle = "rgba(31, 119, 180, 0.35)";
-    ctx.setLineDash([4, 4]);
-    for (const t of [markers.prevStsTimeUs, markers.prevPtpTimeUs]) {
-      if (t == null) continue;
-      // valToPos(dataValue, scaleKey, canvasPixels=true) → pixel x.
-      const x = u.valToPos(t, "time-us", true);
-      ctx.beginPath();
-      ctx.moveTo(x, top);
-      ctx.lineTo(x, bottom);
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
+  // Reference guides: each keeps its live pick's hue at low alpha and
+  // dotted so it cannot be mistaken for a live pick; drawn before the
+  // live elements so they read as background guides.
+  ctx.setLineDash([4, 4]);
+  if (markers.prevStsTimeUs != null) {
+    // Faded red, matching the live STS line (#d62728).
+    ctx.strokeStyle = "rgba(214, 39, 40, 0.35)";
+    const x = u.valToPos(markers.prevStsTimeUs, "time-us", true);
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
   }
+  if (markers.prevPtpTimeUs != null) {
+    // Faded green, matching the live PTP line (#2ca02c).
+    ctx.strokeStyle = "rgba(44, 160, 44, 0.35)";
+    const x = u.valToPos(markers.prevPtpTimeUs, "time-us", true);
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
 
   const LINE_H = 14;
   const gx = -MARKER_LABEL_GAP_PX;

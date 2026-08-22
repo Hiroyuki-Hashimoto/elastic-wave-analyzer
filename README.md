@@ -107,11 +107,14 @@ existing plot).
   PTP peak samples (default `50`).
 - **Overlay previous waveform** — draws the last confirmed file's
   Trigger and Receiver traces faded (same hue at ~30% alpha) behind
-  the live ones as a visual reference. The snapshot is taken on Enter
-  confirmation, is not touched by Escape, and resets when a new batch
-  of files loads. It keeps its capture-time gain/offset scaling and
-  never changes the y-axis range; out-of-range parts are clipped.
-  Default off.
+  the live ones as a visual reference, plus faint dotted verticals at
+  its four picks (red/green matching the live picks). Each live
+  STS/PTP label then gains a third line, `(Δ x.x µs)`, reporting the
+  offset from the corresponding reference pick. The snapshot is taken
+  on Enter confirmation, is not touched by Escape, and resets when a
+  new batch of files loads. It keeps its capture-time gain/offset
+  scaling and never changes the y-axis range; out-of-range parts are
+  clipped. Default off.
 - **Enable trigger auto-detection** — derives the Trigger STS pick
   automatically from the first displayed Transmitter sample at or above
   the threshold, then derives the Trigger PTP the same way a manual
