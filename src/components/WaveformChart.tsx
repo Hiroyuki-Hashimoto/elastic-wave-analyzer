@@ -22,8 +22,15 @@ import { ZOOM_PERCENTAGES } from "../types";
  * .u-over overlay's bounding rect, sized to plotHgtCss = full height
  * minus axis / title space; using that would shrink the chart on
  * every observer tick).
+ *
+ * 284 instead of 260: the native legend row is gone entirely and the
+ * bare cursor tooltip floats over the plot, so its ~24 px row below
+ * the canvas is reclaimed into the plot area here.
  */
-const CHART_HEIGHT = 260;
+const CHART_HEIGHT = 284;
+
+/** Gap between the cursor crosshair point and the bare readout text. */
+const TOOLTIP_GAP_PX = 6;
 
 /** Granularity of the per-chart scrollbar: integer steps 0..SCROLL_STEPS. */
 const SCROLL_STEPS = 1000;
@@ -184,6 +191,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     const triggerOpts = buildOptions(
       "Trigger (with gain)",
       "Trigger (V)",
+      "V",
       trigWin.min,
       trigWin.max,
       display.transmitterV,
@@ -193,6 +201,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     const receiverOpts = buildOptions(
       "Receiver",
       "Receiver (mV)",
+      "mV",
       recvWin.min,
       recvWin.max,
       receiverVm,
@@ -475,6 +484,7 @@ function windowFor(
 function buildOptions(
   title: string,
   yAxisLabel: string,
+  unit: string,
   winMin: number,
   winMax: number,
   values: number[],
@@ -502,6 +512,8 @@ function buildOptions(
     title,
     width,
     height: CHART_HEIGHT,
+    // Native legend is off: a bare two-line cursor tooltip replaces it.
+    legend: { show: false },
     series: [
       {
         label: "Time (µs)",
@@ -542,6 +554,9 @@ function buildOptions(
       // We draw marker lines/annotations here so they overlay the trace
       // and remain part of the same canvas (PNG export in Step 2-6).
       draw: [(u) => drawMarkers(u, markers)],
+      // uPlot fires this on every cursor move (and on leave with
+      // left/top = -10); it drives the bare cursor tooltip.
+      setCursor: [makeCursorTooltip(unit)],
     },
   };
 }
@@ -600,6 +615,72 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
 /** Format a pick's timeUs to one decimal place; "--" for unset points. */
 function formatPick(point: PickPoint | null): string {
   return point ? point.timeUs.toFixed(1) : "--";
+}
+
+/**
+ * Build the per-chart setCursor handler that shows a bare two-line
+ * readout ("12.34 (us)" / "4.56 (V)") hugging the cursor crosshair.
+ * uPlot calls this on every mouse move; we only write textContent and
+ * transform/opacity, so there is no layout thrash or React involvement.
+ * The tooltip div is created lazily once per plot instance; it dies
+ * with the root when plots are rebuilt. No box chrome by design.
+ */
+function makeCursorTooltip(unit: string) {
+  let tip: HTMLDivElement | null = null;
+  return (u: UPlot) => {
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "cursor-tooltip";
+      // Anchor inside .u-over: its origin is exactly the plot area, so
+      // cursor coords map 1:1 without axis/title offsets.
+      u.over.appendChild(tip);
+    }
+    const { left, top } = u.cursor;
+    const idx = u.cursor.idx ?? -1;
+    // Off-plot (-10) or no snapped sample: hide instead of freezing.
+    if (
+      left == null ||
+      top == null ||
+      left < 0 ||
+      top < 0 ||
+      idx < 0 ||
+      !u.data[1] ||
+      idx >= u.data[1].length
+    ) {
+      tip.style.opacity = "0";
+      return;
+    }
+    const tVal = u.data[0]?.[idx];
+    const vVal = u.data[1]?.[idx];
+    tip.textContent = "";
+    // Two plain lines with units only, e.g. "12.34 (us)" over "4.56 (V)".
+    tip.append(
+      `${fmtHover(tVal)} (us)`,
+      document.createElement("br"),
+      `${fmtHover(vVal)} (${unit})`,
+    );
+    const w = tip.offsetWidth;
+    const h = tip.offsetHeight;
+    // Default: hug the crosshair intersection to its upper-right...
+    let x = left + TOOLTIP_GAP_PX;
+    let y = top - h - TOOLTIP_GAP_PX;
+    // ...flip to the upper-left near the right edge of the plot...
+    if (x + w > u.bbox.width) {
+      x = left - w - TOOLTIP_GAP_PX;
+    }
+    // ...and clamp vertically inside the plot area (top edge wins).
+    y = Math.max(
+      TOOLTIP_GAP_PX,
+      Math.min(y, u.bbox.height - h - TOOLTIP_GAP_PX),
+    );
+    tip.style.transform = `translate(${x}px, ${y}px)`;
+    tip.style.opacity = "1";
+  };
+}
+
+/** Compact hover formatting: two decimals covers µs and V/mV ranges. */
+function fmtHover(v: number | null | undefined): string {
+  return v != null && Number.isFinite(v) ? v.toFixed(2) : "--";
 }
 
 /** Destroy the uPlot instance held in plotRef, if any, and clear the ref. */

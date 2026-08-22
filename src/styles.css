@@ -330,6 +330,25 @@ body,
   width: 100%;
 }
 
+/* Bare two-line hover readout ("12.34 (us)" / "4.56 (V)") that hugs
+   the cursor crosshair; positioned by makeCursorTooltip() inside the
+   plot's .u-over. Deliberately no border/background per design, and
+   invisible until the cursor enters the plot. */
+.cursor-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.08s ease;
+  will-change: transform;
+}
+
 /* Horizontal pan bar under each zoomable chart. A thin native range
    input; disabled at 100% zoom where nothing is hidden. */
 .chart-scrollbar {
