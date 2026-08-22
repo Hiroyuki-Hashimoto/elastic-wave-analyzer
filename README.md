@@ -16,17 +16,52 @@ full-result CSV/PNG export.
 
 ## How to install and run locally
 
-Requirements: Node.js 18+ (tested with Node 20+).
+Requirements: Node.js 18+ (tested with Node 20+). On Debian/Ubuntu,
+install Node.js and npm via apt if they are missing:
 
 ```bash
-npm install
-npm run dev      # start the Vite dev server
+sudo apt update && sudo apt install nodejs npm
+```
+
+The version shipped by apt depends on your distribution release. If
+it is older than Node 18, use a newer source such as nvm or
+NodeSource instead.
+
+### Startup flow
+
+1. Install dependencies once after cloning. This creates
+   `node_modules/`, where the local `vite` binary lives:
+
+   ```bash
+   npm install
+   ```
+
+2. Start the dev server and keep the terminal open. The server runs
+   until you stop it with Ctrl+C:
+
+   ```bash
+   npm run dev      # start the Vite dev server
+   ```
+
+3. While the server is running, open the printed URL
+   (`http://localhost:5173` by default) in your browser.
+
+### Other scripts
+
+```bash
 npm run build    # type-check + production build
 npm run preview  # serve the production build locally
 ```
 
-Open the printed local URL (`http://localhost:5173` by default). No
-data leaves your machine.
+### Troubleshooting
+
+- `sh: vite: not found` — dependencies are not installed yet. Run
+  `npm install` first.
+- Browser shows "connection refused" on `localhost:5173` — the dev
+  server is not running. Start it with `npm run dev` and keep the
+  terminal open while browsing.
+
+No data leaves your machine.
 
 ## Input CSV format
 
