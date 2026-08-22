@@ -718,11 +718,9 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
 
   const LINE_H = 14;
   const gx = -MARKER_LABEL_GAP_PX;
-  // PTP stacks below STS; start where the original fixed layout put it
-  // and push down whenever the STS block grows a Δ line.
-  let ptpTop = top + 34;
 
-  // STS marker: red vertical line with a right-aligned label stack.
+  // STS marker: red vertical line with a right-aligned label stack
+  // pinned near the top of the plot.
   if (markers.sts) {
     const x = u.valToPos(markers.sts.timeUs, "time-us", true);
     ctx.strokeStyle = "#d62728";
@@ -738,11 +736,10 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
       const d = markers.sts.timeUs - markers.prevStsTimeUs;
       ctx.fillText(`(Δ ${fmtDelta(d)} µs)`, x + gx, ly); ly += LINE_H;
     }
-    // Preserve the original 2 px breathing room below the stack.
-    ptpTop = Math.max(ptpTop, ly + 2);
   }
-  // PTP marker: green vertical line, label pushed below STS so the two
-  // annotations never visually collide.
+  // PTP marker: green vertical line whose label stack is anchored to
+  // the plot's bottom edge (6 px inset). A Δ line grows the stack
+  // upward, so the bottom edge stays pinned regardless of line count.
   if (markers.ptp) {
     const x = u.valToPos(markers.ptp.timeUs, "time-us", true);
     ctx.strokeStyle = "#2ca02c";
@@ -751,7 +748,8 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     ctx.lineTo(x, bottom);
     ctx.stroke();
     ctx.fillStyle = "#2ca02c";
-    let ly = ptpTop;
+    const lineCount = markers.prevPtpTimeUs != null ? 3 : 2;
+    let ly = bottom - 6 - lineCount * LINE_H;
     ctx.fillText("PTP", x + gx, ly); ly += LINE_H;
     ctx.fillText(`${formatPick(markers.ptp)} µs`, x + gx, ly); ly += LINE_H;
     if (markers.prevPtpTimeUs != null) {
