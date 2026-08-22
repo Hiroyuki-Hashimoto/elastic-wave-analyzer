@@ -596,8 +596,6 @@ export default function App() {
           ) : (
             <ResultsTable results={results} />
           )}
-
-          <QueueList queue={queue} />
         </section>
       </main>
     </div>
@@ -631,49 +629,6 @@ function PickGuidance() {
   );
 }
 
-/**
- * Small list that shows the file queue with per-row status, matching
- * the spec's "current / confirmed / canceled / pending" terminology.
- */
-function QueueList({ queue }: { queue: QueueEntry[] }) {
-  if (queue.length === 0) return null;
-  return (
-    <section className="queue-list">
-      <h3 className="queue-heading">File queue</h3>
-      <ul className="queue-items">
-        {queue.map((e) => {
-          const statusText = statusLabel(e.status);
-          return (
-            <li
-              key={e.id}
-              className={`queue-item queue-${e.status}`}
-              title={e.errorMessage ?? undefined}
-            >
-              <span className="queue-name">{e.fileName}</span>
-              <span className="queue-status">{statusText}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function statusLabel(s: QueueEntry["status"]): string {
-  switch (s) {
-    case "current":
-      return "Current";
-    case "confirmed":
-      return "Confirmed";
-    case "canceled":
-      return "Canceled";
-    case "invalid":
-      return "Invalid";
-    case "pending":
-    default:
-      return "Pending";
-  }
-}
 
 /**
  * Build the success message shown in the notice log when Enter confirms

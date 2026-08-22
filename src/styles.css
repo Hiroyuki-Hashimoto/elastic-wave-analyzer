@@ -317,12 +317,11 @@ body,
   overflow-y: auto;
 }
 
-/* Fixed-height furniture above/below the charts must never yield its
+/* Fixed-height furniture above the charts must never yield its
    pixels when the viewport gets short; the chart blocks flex instead. */
 .progress-label,
 .results-tabs,
-.pick-guidance,
-.queue-list {
+.pick-guidance {
   flex-shrink: 0;
 }
 
@@ -376,10 +375,11 @@ body,
 }
 
 /* Horizontal pan bar under each zoomable chart. A thin native range
-   input; disabled at 100% zoom where nothing is hidden. */
+   input; disabled at 100% zoom where nothing is hidden. The top margin
+   keeps daylight between the x-axis label row and the thumb. */
 .chart-scrollbar {
   width: 100%;
-  margin-top: 4px;
+  margin-top: 10px;
   flex-shrink: 0;
   accent-color: var(--accent);
 }
@@ -436,88 +436,6 @@ body,
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   color: var(--text);
-}
-
-.queue-list {
-  margin: 12px 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.queue-heading {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.queue-items {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 120px;
-  overflow-y: auto;
-}
-
-.queue-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 12px;
-  background: #fafbfc;
-}
-
-.queue-name {
-  word-break: break-all;
-  color: var(--text);
-}
-
-.queue-status {
-  flex: 0 0 auto;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.queue-current {
-  background: #fff5e6;
-  border-color: #d8a64b;
-}
-
-.queue-current .queue-status {
-  color: #8a5a00;
-}
-
-.queue-confirmed {
-  background: #eff8ee;
-  border-color: #b6d8b3;
-}
-
-.queue-confirmed .queue-status {
-  color: #1d6f1d;
-}
-
-.queue-canceled {
-  background: #fbe9e9;
-  border-color: #d6a8a8;
-}
-
-.queue-canceled .queue-status {
-  color: #8a1f1f;
-}
-
-.queue-invalid {
-  background: #f3e6e6;
-  border-color: #d0a0a0;
-}
-
-.queue-invalid .queue-status {
-  color: #8a1f1f;
 }
 
 .export-button {
