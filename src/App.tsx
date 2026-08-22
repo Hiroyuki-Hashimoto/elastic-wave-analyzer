@@ -624,7 +624,8 @@ function PickGuidance() {
       <p className="pick-guidance-line">
         <kbd>Enter</kbd> confirm{" · "}
         <kbd>Esc</kbd> skip this file{" · "}
-        <kbd>Z</kbd> zoom
+        <kbd>Z</kbd> zoom (resets pan){" · "}
+        drag the bar under a chart to pan while zoomed
       </p>
     </div>
   );

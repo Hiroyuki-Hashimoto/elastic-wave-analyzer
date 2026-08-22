@@ -117,6 +117,12 @@ existing plot).
   (default off).
 - **Trim start (µs)** / **Trim end (µs)** — inclusive trim window
   (defaults `-50` / `800`).
+- **Zoom (Z key) and pan scrollbars** — `Z` cycles seven zoom levels
+  (100% → 10%). While zoomed, each chart shows an independent
+  horizontal scrollbar that pans its own window through the full
+  span. Scroll positions persist across picks, Enter confirmation,
+  and file advances; changing the zoom level snaps both charts back
+  to the left edge. At 100% zoom the bars are shown disabled.
 
 ## Privacy
 

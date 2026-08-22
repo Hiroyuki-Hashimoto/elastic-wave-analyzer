@@ -1,4 +1,11 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  type FormEvent,
+  type RefObject,
+} from "react";
 import UPlot from "uplot";
 import {
   findNearestSampleIndex,
@@ -17,6 +24,9 @@ import { ZOOM_PERCENTAGES } from "../types";
  * every observer tick).
  */
 const CHART_HEIGHT = 260;
+
+/** Granularity of the per-chart scrollbar: integer steps 0..SCROLL_STEPS. */
+const SCROLL_STEPS = 1000;
 import type {
   DisplayWaveform,
   PickAxis,
@@ -93,6 +103,19 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
   peakWidthUsRef.current = peakWidthUs;
   const dTUsRef = useRef(dTUs);
   dTUsRef.current = dTUs;
+  const zoomIndexRef = useRef(zoomIndex);
+  zoomIndexRef.current = zoomIndex;
+  // Per-chart horizontal scroll fractions (0..1): the visible window's
+  // left edge as a share of the pannable span. Refs keep scrollbar drags
+  // re-render-free; uPlot pans via imperative setScale instead.
+  const triggerFracRef = useRef(0);
+  const receiverFracRef = useRef(0);
+  // Uncontrolled range inputs; programmatic resets write to their DOM.
+  const triggerBarRef = useRef<HTMLInputElement>(null);
+  const receiverBarRef = useRef<HTMLInputElement>(null);
+  // Previous zoom level: only a zoom change (Z key) snaps both charts
+  // back to the left edge, never picks / Enter / file advances.
+  const prevZoomRef = useRef(zoomIndex);
 
   // (Re)build the plots whenever display data OR picker markers change.
   useEffect(() => {
@@ -106,12 +129,34 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     const time = display.timeUs;
     // x-axis span equals the trimmed time range of the current display.
     const xMin = time[0];
-    // Zoom keeps the left boundary fixed and only shrinks the right one.
     // Unknown / out-of-range zoomIndex falls back to 100% (full range).
     const ratio =
       ZOOM_PERCENTAGES[zoomIndex] ?? ZOOM_PERCENTAGES[0];
     const fullSpan = time[time.length - 1] - xMin;
-    const xMax = xMin + fullSpan * ratio;
+
+    // Only a zoom-level change (Z key) snaps both charts back to the
+    // left edge; picks, Enter, and file advances keep their scroll.
+    if (prevZoomRef.current !== zoomIndex) {
+      prevZoomRef.current = zoomIndex;
+      triggerFracRef.current = 0;
+      receiverFracRef.current = 0;
+    }
+    // Each chart pans independently inside the same full data span.
+    const trigWin = windowFor(xMin, fullSpan, ratio, triggerFracRef.current);
+    const recvWin = windowFor(xMin, fullSpan, ratio, receiverFracRef.current);
+
+    // Sync the uncontrolled sliders to the refs (e.g. after a Z reset)
+    // so thumb positions always match what the plots are showing.
+    if (triggerBarRef.current) {
+      triggerBarRef.current.value = String(
+        Math.round(triggerFracRef.current * SCROLL_STEPS),
+      );
+    }
+    if (receiverBarRef.current) {
+      receiverBarRef.current.value = String(
+        Math.round(receiverFracRef.current * SCROLL_STEPS),
+      );
+    }
 
     // Receiver signals are typically a few mV, so the y axis is shown in
     // mV for readability. Scale the V array into mV once here and pass
@@ -139,8 +184,8 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     const triggerOpts = buildOptions(
       "Trigger (with gain)",
       "Trigger (V)",
-      xMin,
-      xMax,
+      trigWin.min,
+      trigWin.max,
       display.transmitterV,
       triggerMarkers,
       triggerRef.current?.clientWidth ?? 800,
@@ -148,8 +193,8 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     const receiverOpts = buildOptions(
       "Receiver",
       "Receiver (mV)",
-      xMin,
-      xMax,
+      recvWin.min,
+      recvWin.max,
       receiverVm,
       receiverMarkers,
       receiverRef.current?.clientWidth ?? 800,
@@ -302,13 +347,69 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     }
   }
 
+  // Scrollbars enable only when a zoom level actually hides part of the
+  // span; at 100% they stay mounted but disabled for a stable layout.
+  const ratioNow = ZOOM_PERCENTAGES[zoomIndex] ?? ZOOM_PERCENTAGES[0];
+  const spanPannable =
+    !!display &&
+    display.timeUs.length >= 2 &&
+    display.timeUs[display.timeUs.length - 1] > display.timeUs[0];
+  const scrollable = spanPannable && ratioNow < 1;
+
+  /** Slider input: store the fraction and pan that chart only. */
+  function handleScrollInput(
+    axis: PickAxis,
+    e: FormEvent<HTMLInputElement>,
+  ) {
+    const frac = Number(e.currentTarget.value) / SCROLL_STEPS;
+    // Guard malformed events; windowFor clamps again defensively.
+    if (!Number.isFinite(frac)) return;
+    if (axis === "trigger") triggerFracRef.current = frac;
+    else receiverFracRef.current = frac;
+    applyScroll(axis);
+  }
+
+  /**
+   * Pan one chart without rebuilding it: recompute that axis's visible
+   * window from the latest refs and hand it to uPlot via setScale,
+   * which redraws axes, series, and our marker draw hook in place.
+   */
+  function applyScroll(axis: PickAxis) {
+    const plot =
+      axis === "trigger" ? triggerPlotRef.current : receiverPlotRef.current;
+    const disp = displayRef.current;
+    if (!plot || !disp || disp.timeUs.length === 0) return;
+    const t = disp.timeUs;
+    const xMin = t[0];
+    const fullSpan = t[t.length - 1] - xMin;
+    const ratio =
+      ZOOM_PERCENTAGES[zoomIndexRef.current] ?? ZOOM_PERCENTAGES[0];
+    const frac =
+      axis === "trigger" ? triggerFracRef.current : receiverFracRef.current;
+    const win = windowFor(xMin, fullSpan, ratio, frac);
+    // "time-us" matches the custom numeric scale key used by both plots.
+    plot.setScale("time-us", { min: win.min, max: win.max });
+  }
+
   return (
     <div className="chart-stack">
       <div className="chart-block">
         <div className="chart-host" ref={triggerRef} />
+        <ChartScrollbar
+          axis="trigger"
+          barRef={triggerBarRef}
+          disabled={!scrollable}
+          onInput={handleScrollInput}
+        />
       </div>
       <div className="chart-block">
         <div className="chart-host" ref={receiverRef} />
+        <ChartScrollbar
+          axis="receiver"
+          barRef={receiverBarRef}
+          disabled={!scrollable}
+          onInput={handleScrollInput}
+        />
       </div>
     </div>
   );
@@ -321,6 +422,49 @@ type ChartMarkers = {
   ptp: PickPoint | null;
 };
 
+type ChartScrollbarProps = {
+  axis: PickAxis;
+  barRef: RefObject<HTMLInputElement>;
+  disabled: boolean;
+  onInput: (axis: PickAxis, e: FormEvent<HTMLInputElement>) => void;
+};
+
+/** Thin native range input that pans one chart's visible x window. */
+function ChartScrollbar({ axis, barRef, disabled, onInput }: ChartScrollbarProps) {
+  return (
+    <input
+      ref={barRef}
+      type="range"
+      className="chart-scrollbar"
+      min={0}
+      max={SCROLL_STEPS}
+      step={1}
+      defaultValue={0}
+      disabled={disabled}
+      aria-label={`Pan ${axis === "trigger" ? "Trigger" : "Receiver"} chart horizontally`}
+      onInput={(e) => onInput(axis, e)}
+    />
+  );
+}
+
+/**
+ * Compute the visible x window for a scroll fraction. The window keeps
+ * the zoomed width (fullSpan * ratio); its left edge slides across the
+ * pannable span [xMin, xMin + fullSpan]. frac is clamped to [0, 1].
+ */
+function windowFor(
+  xMin: number,
+  fullSpan: number,
+  ratio: number,
+  frac: number,
+): { min: number; max: number } {
+  const winW = fullSpan * ratio;
+  const maxOffset = Math.max(0, fullSpan - winW);
+  const f = Number.isFinite(frac) ? Math.min(1, Math.max(0, frac)) : 0;
+  const offset = f * maxOffset;
+  return { min: xMin + offset, max: xMin + offset + winW };
+}
+
 /**
  * Build a uPlot options object for one chart with a numeric microsecond
  * x-axis and an auto-padded y-axis fitted to the given values. The
@@ -331,8 +475,8 @@ type ChartMarkers = {
 function buildOptions(
   title: string,
   yAxisLabel: string,
-  xMin: number,
-  xMax: number,
+  winMin: number,
+  winMax: number,
   values: number[],
   markers: ChartMarkers,
   width: number,
@@ -389,7 +533,7 @@ function buildOptions(
       },
     ],
     scales: {
-      [timeUsScale]: { min: xMin, max: xMax, time: false },
+      [timeUsScale]: { min: winMin, max: winMax, time: false },
       y: { min: yMin, max: yMax },
     },
     cursor: { show: true },
@@ -417,6 +561,11 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
   ctx.lineWidth = 1;
   ctx.font = "11px sans-serif";
   ctx.textBaseline = "top";
+  // Clip to the plot box so markers outside the scrolled window cannot
+  // bleed over the axes or gutters.
+  ctx.beginPath();
+  ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
+  ctx.clip();
 
   // STS marker: red vertical line with a 2-line label (kind on line 1,
   // time value on line 2) anchored near the top axis.

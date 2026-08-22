@@ -330,6 +330,14 @@ body,
   width: 100%;
 }
 
+/* Horizontal pan bar under each zoomable chart. A thin native range
+   input; disabled at 100% zoom where nothing is hidden. */
+.chart-scrollbar {
+  width: 100%;
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+
 .empty-state {
   padding: 48px 16px;
   text-align: center;
