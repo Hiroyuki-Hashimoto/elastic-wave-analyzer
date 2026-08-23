@@ -12,12 +12,15 @@ adjustable amplitude gain, offset correction, time trimming, manual
 or automatic Start-to-Start (STS) / Peak-to-Peak (PTP) picking,
 previous-waveform overlay, and wave velocity calculation.
 
-## Live demo
+## Web app
 
 <https://hiroyuki-hashimoto.github.io/elastic-wave-analyzer/>
 
 CSV files are processed entirely in your browser — nothing is
 uploaded to any server.
+
+Intended for use on desktop browsers at around Full HD resolution
+(1920 × 1080).
 
 ## Features
 
