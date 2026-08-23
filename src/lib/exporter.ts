@@ -1,12 +1,12 @@
 import type { AnalysisResult } from "../types";
 
-/** Phase 2–5 implements the all-results CSV exporter. Phase 2–6 adds PNG. */
+/** Implements the all-results CSV exporter and the PNG chart export. */
 
 export type ExportInput = {
   results: AnalysisResult[];
 };
 
-/** Exact header order required by the Step 2-5 spec. */
+/** Exact column order of the exported CSV header. */
 export const RESULTS_CSV_HEADER = [
   "File_Name",
   "Trigger_STS_time(us)",
@@ -149,7 +149,7 @@ export function makeTimestampedFileName(
 }
 
 /**
- * Phase 2–6: export the current chart as a PNG download. Combines the
+ * Export the current chart as a PNG download. Combines the
  * two uPlot canvases (Trigger on top, Receiver on bottom) into one
  * PNG so the saved image matches what the user sees on screen,
  * including the axes, grid, and any STS/PTP marker overlays drawn via

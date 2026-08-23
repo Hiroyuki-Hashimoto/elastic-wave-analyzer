@@ -61,7 +61,7 @@ export type DisplayWaveform = {
   receiverV: number[];
 };
 
-/** Phase 2 output shape: per-file STS/PTP picks and propagation time (null until picked). */
+/** Per-file STS/PTP picks and propagation time (null until picked). */
 export type AnalysisResult = {
   fileName: string;
   triggerStsTimeUs: number | null;

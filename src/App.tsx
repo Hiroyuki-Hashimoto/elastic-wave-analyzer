@@ -49,7 +49,7 @@ type QueueEntry = {
 };
 
 /**
- * App holds all Phase 0–2 state: the loaded waveform queue, display
+ * App holds all application state: the loaded waveform queue, display
  * settings, the active picker state, processed results, and the
  * notification log. No global state library is used.
  */
@@ -62,8 +62,8 @@ export default function App() {
   // Picker state holds the four STS/PTP picks for the current file;
   // replacing a pick on an axis only overwrites that axis/kind slot.
   const [picker, setPicker] = useState<PickerState>(emptyPickerState());
-  // One result per Enter-confirm or Escape-cancel; consumed by Step 2-5
-  // CSV export and Step 2-6 PNG export.
+  // One result per Enter-confirm or Escape-cancel; consumed by the
+  // results CSV download and the PNG chart export.
   const [results, setResults] = useState<AnalysisResult[]>([]);
   // Monotonic counter so each notice gets a unique key for React.
   const noticeIdRef = useRef(0);
@@ -632,7 +632,6 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <h1>Elastic Wave Analyzer</h1>
-        <p className="app-subtitle">Phase 2: manual STS/PTP picking</p>
       </header>
 
       <main className="app-main">

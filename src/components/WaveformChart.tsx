@@ -650,7 +650,7 @@ function buildOptions(
     hooks: {
       // uPlot hook fired after axes, grid, and series are all drawn.
       // We draw marker lines/annotations here so they overlay the trace
-      // and remain part of the same canvas (PNG export in Step 2-6).
+      // and remain part of the same canvas (PNG export).
       draw: [(u) => drawMarkers(u, markers)],
       // uPlot fires this on every cursor move (and on leave with
       // left/top = -10); it drives the bare cursor tooltip.
