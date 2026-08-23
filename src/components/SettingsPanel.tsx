@@ -9,11 +9,10 @@ type Props = {
  * Settings panel holds only the per-measurement controls:
  *   1. Subtract initial voltage and Trigger gain stacked in column 1;
  *      Overlay previous waveform and Peak search width in column 2.
- *   2. Time trimming and Wave velocity bordered subsections side by
- *      side so their Enable toggles read as parallel options.
- *   3. Trigger auto-detection (Enable toggle + Threshold) as a left
- *      half bordered subsection below them, keeping trigger-related
- *      controls grouped toward the left of the panel.
+ *   2. Time trimming, Wave velocity, Trigger auto-detection (row 2
+ *      left) and Cross-correlation (row 2 right) bordered subsections
+ *      in a two-column grid so their Enable toggles read as parallel
+ *      options.
  *
  * The file picker, dropzone, results CSV download, and PNG auto-save
  * toggle have moved to ImportsExportsPanel.
@@ -197,6 +196,57 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
               }}
             />
           </label>
+        </div>
+
+        {/* Cross-correlation receiver picking: as the fourth grid child
+            it flows to row 2 column 2, mirroring the trigger box size.
+            The window spans Before µs before / After µs after the
+            previous confirmed Receiver STS pick. */}
+        <div className="settings-subsection">
+          <h3 className="settings-subsection-heading">Cross-correlation</h3>
+
+          <label className="field field-row">
+            <input
+              type="checkbox"
+              checked={settings.ccEnabled}
+              onChange={(e) => update({ ccEnabled: e.target.checked })}
+            />
+            <span>Enable CC receiver picking</span>
+          </label>
+
+          <div className="field-row-split">
+            <label className="field">
+              <span className="field-label">Before (µs)</span>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                disabled={!settings.ccEnabled}
+                value={settings.ccBeforeUs}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  // Negative or non-finite reach collapses to 0 so the
+                  // window stays well-defined around the previous STS.
+                  update({ ccBeforeUs: Number.isFinite(v) && v >= 0 ? v : 0 });
+                }}
+              />
+            </label>
+
+            <label className="field">
+              <span className="field-label">After (µs)</span>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                disabled={!settings.ccEnabled}
+                value={settings.ccAfterUs}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  update({ ccAfterUs: Number.isFinite(v) && v >= 0 ? v : 0 });
+                }}
+              />
+            </label>
+          </div>
         </div>
       </section>
     </aside>

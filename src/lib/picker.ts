@@ -1,4 +1,5 @@
 import type { AnalysisResult, PickerState, VelocityConfig } from "../types";
+import { resampleOnto } from "./waveform";
 
 /** Return a PickerState with all four picks unset and no confirm/cancel. */
 export function emptyPickerState(): PickerState {
@@ -101,6 +102,92 @@ export function findReceiverPtpIndex(
   }
   // No window-peak found (flat data): fall back to the STS index.
   return stsIndex;
+}
+
+/**
+ * Estimate how far the current Receiver trace is time-shifted relative
+ * to the reference one by full cross-correlation inside the window
+ * [centerUs - beforeUs, centerUs + afterUs] on the current axis. The
+ * reference trace is resampled onto the current grid first; both slices
+ * are DC-removed and peak-normalized so only waveform shape matters.
+ * Returns delta µs where positive means the current wave arrives LATER
+ * than the reference (mirrors the Python analyzer's convention), or
+ * null when the window holds too few samples or either slice is flat.
+ */
+export function crossCorrelateDeltaUs(
+  currTimeUs: number[],
+  currV: number[],
+  prevTimeUs: number[],
+  prevV: number[],
+  centerUs: number,
+  beforeUs: number,
+  afterUs: number,
+  dtUs: number,
+): number | null {
+  // Reference trace on the current grid; nulls outside its span act as 0.
+  const refFull = resampleOnto(currTimeUs, prevTimeUs, prevV);
+
+  // Contiguous run of current samples inside the correlation window.
+  const lo = centerUs - Math.max(0, beforeUs);
+  const hi = centerUs + Math.max(0, afterUs);
+  const idxs: number[] = [];
+  for (let i = 0; i < currTimeUs.length; i++) {
+    if (currTimeUs[i] >= lo && currTimeUs[i] <= hi) idxs.push(i);
+  }
+  const n = idxs.length;
+  if (n < 2) return null;
+
+  // Build both window slices and their sums in one pass.
+  const cur = new Array<number>(n);
+  const ref = new Array<number>(n);
+  let cSum = 0;
+  let rSum = 0;
+  for (let k = 0; k < n; k++) {
+    const i = idxs[k];
+    cur[k] = currV[i];
+    const pv = refFull[i];
+    ref[k] = pv == null ? 0 : pv;
+    cSum += cur[k];
+    rSum += ref[k];
+  }
+
+  // DC removal, then normalize each slice by its max absolute value.
+  const cMean = cSum / n;
+  const rMean = rSum / n;
+  let cMax = 0;
+  let rMax = 0;
+  for (let k = 0; k < n; k++) {
+    cur[k] -= cMean;
+    ref[k] -= rMean;
+    cMax = Math.max(cMax, Math.abs(cur[k]));
+    rMax = Math.max(rMax, Math.abs(ref[k]));
+  }
+  if (cMax === 0 || rMax === 0) return null;
+  for (let k = 0; k < n; k++) {
+    cur[k] /= cMax;
+    ref[k] /= rMax;
+  }
+
+  // Full cross-correlation over integer shifts. s > 0 means the current
+  // slice aligns with a right-shifted reference, i.e. a later arrival —
+  // same sign convention as numpy correlate in the Python analyzer.
+  let bestS = 0;
+  let bestC = -Infinity;
+  for (let s = -(n - 1); s <= n - 1; s++) {
+    let acc = 0;
+    for (let i = 0; i < n; i++) {
+      const j = i - s;
+      if (j >= 0 && j < n) acc += cur[i] * ref[j];
+    }
+    if (acc > bestC) {
+      bestC = acc;
+      bestS = s;
+    }
+  }
+  if (!Number.isFinite(dtUs) || dtUs <= 0 || !Number.isFinite(bestS)) {
+    return null;
+  }
+  return bestS * dtUs;
 }
 
 /**

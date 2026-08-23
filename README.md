@@ -123,6 +123,16 @@ existing plot).
 - **Threshold (V)** — crossing level compared against the displayed
   (gain-applied) Trigger voltage, not the raw CSV volts
   (default `0.1`).
+- **Enable CC receiver picking** — estimates the Receiver STS pick by
+  cross-correlating the live Receiver trace against the last confirmed
+  one (DC-removed, peak-normalized) inside a window spanning
+  `Before (µs)` before / `After (µs)` after the previous Receiver STS
+  pick; the lag becomes a time shift applied to that reference STS,
+  and PTP is derived from it with the usual window-peak search.
+  Re-runs whenever a relevant setting changes while enabled, so manual
+  receiver picks are overwritten; needs at least one confirmed file as
+  reference and silently skips until then. Defaults: off, window
+  `25` / `150` µs.
 - **Enable time trimming** — restricts the displayed range
   (default off).
 - **Trim start (µs)** / **Trim end (µs)** — inclusive trim window

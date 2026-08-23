@@ -7,7 +7,10 @@ import WaveformChart, {
   type WaveformChartHandle,
 } from "./components/WaveformChart";
 import {
+  crossCorrelateDeltaUs,
   emptyPickerState,
+  findNearestSampleIndex,
+  findReceiverPtpIndex,
   findTriggerPtpIndex,
   findTriggerStsByThreshold,
   pickerToAnalysisResult,
@@ -191,6 +194,84 @@ export default function App() {
     dTUs,
     settings.triggerAutoEnabled,
     settings.triggerThresholdV,
+    settings.peakWidthUs,
+    addNotice,
+  ]);
+
+  // CC receiver auto-picking: while armed with a reference snapshot,
+  // cross-correlate the live Receiver around the previous STS pick to
+  // find the time shift, snap an STS pick at (previous STS + delta) and
+  // derive PTP from it with the same window-peak search a manual left
+  // click uses. Re-runs on every relevant change like the trigger
+  // detector, so manual receiver edits are overwritten while armed.
+  useEffect(() => {
+    // Disarmed / no reference snapshot yet (first file): silently skip.
+    if (!settings.ccEnabled || !prevOverlay || !chartDisplay) return;
+    if (chartDisplay.timeUs.length === 0 || dTUs === null) return;
+    const prevSts = prevOverlay.picks.receiverSts;
+    if (!prevSts) return;
+
+    const time = chartDisplay.timeUs;
+    const values = chartDisplay.receiverV;
+    const deltaUs = crossCorrelateDeltaUs(
+      time,
+      values,
+      prevOverlay.display.timeUs,
+      prevOverlay.display.receiverV,
+      prevSts.timeUs,
+      settings.ccBeforeUs,
+      settings.ccAfterUs,
+      dTUs,
+    );
+    if (deltaUs === null || !Number.isFinite(deltaUs)) {
+      // Correlation failed: keep the receiver axis fully automatic by
+      // clearing stale picks, and say why nothing was placed.
+      setPicker((prev) => ({
+        ...prev,
+        receiverSts: null,
+        receiverPtp: null,
+      }));
+      addNotice(
+        "warning",
+        "CC receiver pick failed: window has too few samples or a flat signal.",
+      );
+      return;
+    }
+
+    // Estimated arrival: reference STS shifted by the correlation lag.
+    const estStsUs = prevSts.timeUs + deltaUs;
+    const stsIdx = findNearestSampleIndex(time, estStsUs);
+    const ptpIdx = findReceiverPtpIndex(
+      values,
+      stsIdx,
+      settings.peakWidthUs,
+      dTUs,
+    );
+    setPicker((prev) => ({
+      ...prev,
+      isConfirmed: false,
+      receiverSts: {
+        axis: "receiver",
+        kind: "sts",
+        index: stsIdx,
+        timeUs: time[stsIdx],
+        voltage: values[stsIdx],
+      },
+      receiverPtp: {
+        axis: "receiver",
+        kind: "ptp",
+        index: ptpIdx,
+        timeUs: time[ptpIdx],
+        voltage: values[ptpIdx],
+      },
+    }));
+  }, [
+    chartDisplay,
+    dTUs,
+    prevOverlay,
+    settings.ccEnabled,
+    settings.ccBeforeUs,
+    settings.ccAfterUs,
     settings.peakWidthUs,
     addNotice,
   ]);

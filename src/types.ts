@@ -20,6 +20,16 @@ export type DisplaySettings = {
    * redrawn faded behind the live ones as a visual reference.
    */
   overlayPrevEnabled: boolean;
+  /**
+   * When true, the Receiver STS pick (and PTP derived from it) is
+   * estimated by cross-correlating the live Receiver trace against the
+   * reference one inside a window around the previous STS pick.
+   */
+  ccEnabled: boolean;
+  /** Correlation window reach BEFORE the previous Receiver STS, in µs. */
+  ccBeforeUs: number;
+  /** Correlation window reach AFTER the previous Receiver STS, in µs. */
+  ccAfterUs: number;
   /** When true, Trigger STS/PTP picks are derived automatically (see below). */
   triggerAutoEnabled: boolean;
   /**
@@ -139,6 +149,11 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   // Previous-waveform overlay starts off; it only has content after
   // the first Enter-confirmed file anyway.
   overlayPrevEnabled: false,
+  // CC receiver picking starts off. Defaults: 25 µs of look-back and
+  // the Python reference's 150 µs forward window.
+  ccEnabled: false,
+  ccBeforeUs: 25,
+  ccAfterUs: 150,
   // Trigger auto-detection starts disabled; 0.1 V suits low-gain views
   // and is raised by the user when noise triggers earlier than the pulse.
   triggerAutoEnabled: false,

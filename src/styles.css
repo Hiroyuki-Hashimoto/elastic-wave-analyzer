@@ -250,6 +250,25 @@ body,
   gap: 8px;
 }
 
+/* Two half-width fields side by side inside a subsection (e.g. the
+   CC window's Before / After inputs). */
+.field-row-split {
+  display: flex;
+  gap: 8px;
+}
+
+.field-row-split .field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Inputs fill their half-cell instead of forcing the grid column wide
+   with their intrinsic width (grid tracks are minmax(auto, 1fr)). */
+.field-row-split input[type="number"] {
+  width: 100%;
+  min-width: 0;
+}
+
 .field-label {
   color: var(--muted);
 }
