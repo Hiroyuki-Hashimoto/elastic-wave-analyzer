@@ -1,11 +1,16 @@
 # Elastic Wave Analyzer
 
-A lightweight, browser-only static web app for inspecting
-oscilloscope CSV waveforms of elastic wave propagation. The interface
-renders a Trigger (transmitter) and a Receiver trace on a shared
-microsecond time axis, with adjustable amplitude gain, offset
-correction, time trimming, automatic STS/PTP picking, previous-
-waveform overlay, and wave velocity calculation.
+A lightweight, browser-only web app for analyzing elastic wave
+measurement data. It was primarily designed for waveforms acquired
+with bender elements and similar transducers during geotechnical
+testing, and estimates elastic wave velocities in geomaterials by
+identifying wave travel times from time-domain signals.
+
+The interface renders Trigger (transmitter) and Receiver traces from
+oscilloscope CSV exports on a shared microsecond time axis, with
+adjustable amplitude gain, offset correction, time trimming, manual
+or automatic Start-to-Start (STS) / Peak-to-Peak (PTP) picking,
+previous-waveform overlay, and wave velocity calculation.
 
 ## Live demo
 
