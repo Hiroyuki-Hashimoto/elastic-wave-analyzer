@@ -3,7 +3,7 @@
 ## Persistent development rules
 
 - Read this AGENTS.md before making changes.
-- Keep the repository private until the user explicitly requests public release.
+- The repository is public (GitHub Pages); never commit secrets, keys, or personal data.
 - Do not run git push unless the user explicitly asks.
 - Commit each completed, independently verifiable feature as a separate commit.
 - Before every commit, run npm run build and report the result.
