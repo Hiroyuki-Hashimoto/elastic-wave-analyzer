@@ -652,12 +652,11 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <h1>Elastic Wave Analyzer</h1>
-      </header>
-
       <main className="app-main">
         <div className="settings-column">
+          {/* Title sits in the left column so the chart area can span
+              the full viewport height without a header band above it. */}
+          <h1 className="app-title">Elastic Wave Analyzer</h1>
           <ImportsExportsPanel
             onSelectFiles={handleFiles}
             canExport={results.length > 0}
