@@ -30,7 +30,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           gain stack in column 1; the overlay toggle and Peak search
           width stack in column 2. */}
       <section className="settings-measurement-grid">
-        <label className="field field-row grid-c1-r1">
+        <label
+          className="field field-row grid-c1-r1"
+          title="Subtract the pre-trigger baseline from every sample (offset correction)."
+        >
           <input
             type="checkbox"
             checked={settings.offsetEnabled}
@@ -41,7 +44,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
 
         {/* Previous-waveform overlay: draws the last confirmed file's
             traces faded behind the live ones on both charts. */}
-        <label className="field field-row grid-c2-r1">
+        <label
+          className="field field-row grid-c2-r1"
+          title="Draw the last confirmed file's traces faded behind the current ones."
+        >
           <input
             type="checkbox"
             checked={settings.overlayPrevEnabled}
@@ -50,7 +56,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           <span>Overlay previous waveform</span>
         </label>
 
-        <label className="field grid-c1-r2">
+        <label
+          className="field grid-c1-r2"
+          title="Scale applied when the transmitter drive voltage is amplified beyond the oscilloscope-recorded trigger voltage."
+        >
           <span className="field-label">Trigger gain</span>
           <input
             type="number"
@@ -64,7 +73,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           />
         </label>
 
-        <label className="field grid-c2-r2">
+        <label
+          className="field grid-c2-r2"
+          title="Half-window used to auto-locate the PTP peak after an STS click."
+        >
           <span className="field-label">Peak search width (µs)</span>
           <input
             type="number"
@@ -86,7 +98,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
       <section className="settings-section-grid-2">
         <div className="settings-subsection">
           <h3 className="settings-subsection-heading">Time trimming</h3>
-          <label className="field field-row">
+          <label
+            className="field field-row"
+            title="Show only the range between trim start and end."
+          >
             <input
               type="checkbox"
               checked={settings.trimEnabled}
@@ -95,7 +110,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
             <span>Enable time trimming</span>
           </label>
 
-          <label className="field">
+          <label
+            className="field"
+            title="Beginning of the time range kept after trimming."
+          >
             <span className="field-label">Trim start (µs)</span>
             <input
               type="number"
@@ -109,7 +127,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
             />
           </label>
 
-          <label className="field">
+          <label
+            className="field"
+            title="End of the time range kept after trimming."
+          >
             <span className="field-label">Trim end (µs)</span>
             <input
               type="number"
@@ -126,7 +147,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
 
         <div className="settings-subsection">
           <h3 className="settings-subsection-heading">Wave velocity</h3>
-          <label className="field field-row">
+          <label
+            className="field field-row"
+            title="Compute STS/PTP wave velocities on Enter-confirm."
+          >
             <input
               type="checkbox"
               checked={settings.velocityEnabled}
@@ -135,7 +159,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
             <span>Enable wave velocity calculation</span>
           </label>
 
-          <label className="field">
+          <label
+            className="field"
+            title="Trigger-to-receiver distance used by the velocity calculation."
+          >
             <span className="field-label">Distance (mm)</span>
             <input
               type="number"
@@ -150,7 +177,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
             />
           </label>
 
-          <label className="field">
+          <label
+            className="field"
+            title="Correction subtracted from the measured delta-T before computing wave velocity."
+          >
             <span className="field-label">System delay correction (us)</span>
             <input
               type="number"
@@ -172,7 +202,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
         <div className="settings-subsection">
           <h3 className="settings-subsection-heading">Trigger auto-detection</h3>
 
-          <label className="field field-row">
+          <label
+            className="field field-row"
+            title="Auto-pick Trigger STS at the first threshold crossing and derive PTP."
+          >
             <input
               type="checkbox"
               checked={settings.triggerAutoEnabled}
@@ -181,7 +214,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
             <span>Enable trigger auto-detection</span>
           </label>
 
-          <label className="field">
+          <label
+            className="field"
+            title="Voltage level the trigger waveform must cross to set the automatic STS pick."
+          >
             <span className="field-label">Threshold (V)</span>
             <input
               type="number"
@@ -205,7 +241,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
         <div className="settings-subsection">
           <h3 className="settings-subsection-heading">Cross-correlation</h3>
 
-          <label className="field field-row">
+          <label
+            className="field field-row"
+            title="Estimate Receiver STS by cross-correlation with the last confirmed file, then derive PTP."
+          >
             <input
               type="checkbox"
               checked={settings.ccEnabled}
@@ -215,7 +254,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           </label>
 
           <div className="field-row-split">
-            <label className="field">
+            <label
+              className="field"
+              title="Correlation window reach before the previous Receiver STS."
+            >
               <span className="field-label">Before (µs)</span>
               <input
                 type="number"
@@ -232,7 +274,10 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
               />
             </label>
 
-            <label className="field">
+            <label
+              className="field"
+              title="Correlation window reach after the previous Receiver STS."
+            >
               <span className="field-label">After (µs)</span>
               <input
                 type="number"
