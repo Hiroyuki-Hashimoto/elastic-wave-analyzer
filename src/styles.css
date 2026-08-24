@@ -327,7 +327,9 @@ body,
 .chart-stack {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  /* Slim gap between the two chart blocks: every px here goes straight
+     to the plots, which share the leftover viewport height. */
+  gap: 12px;
   /* Absorb the leftover height between the fixed furniture rows. */
   flex: 1 1 auto;
   min-height: 0;
@@ -336,7 +338,7 @@ body,
 .chart-block {
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 8px;
+  padding: 6px;
   background: #ffffff;
   /* Equal shares of the leftover height, floored at 200 px so traces
      stay readable; below that floor the chart area scrolls instead. */
@@ -376,11 +378,11 @@ body,
 /* Chart titles rendered as plain DOM above each host (uPlot runs
    title-less) so root height always equals the canvas height. */
 .chart-title {
-  margin: 0 0 4px;
+  margin: 0 0 2px;
   text-align: center;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: bold;
-  line-height: 1.5;
+  line-height: 1.35;
 }
 
 /* Native horizontal scrollbar under each zoomable chart: an overflow
@@ -395,7 +397,9 @@ body,
   height: 14px;
   overflow-x: auto;
   overflow-y: hidden;
-  margin-top: 10px;
+  /* Slim top margin keeps the bar clear of the canvas above while
+     giving most of the block's height back to the plot. */
+  margin-top: 2px;
   flex-shrink: 0;
 }
 

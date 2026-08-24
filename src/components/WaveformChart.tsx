@@ -28,6 +28,13 @@ const TOOLTIP_GAP_PX = 6;
 
 /** Gap between a pick marker's vertical line and its right-aligned label. */
 const MARKER_LABEL_GAP_PX = 7;
+
+/** Compact axis value font shared by both plots (uPlot default is 12px). */
+const AXIS_FONT =
+  '11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+/** Axis caption font ("Time (µs)", "Trigger (V)", ...), bold like uPlot's. */
+const AXIS_LABEL_FONT = `bold ${AXIS_FONT}`;
 import type {
   DisplayWaveform,
   PickAxis,
@@ -629,17 +636,34 @@ function buildOptions(
       {
         scale: timeUsScale,
         label: "Time (µs)",
+        // uPlot defaults burn ~80 px below the plot (size 50 + label 30).
+        // Fixed compact heights for the tick-value row (size) and the
+        // caption strip (labelSize) hand that space back to the trace.
+        size: 22,
+        gap: 2,
+        font: AXIS_FONT,
+        labelSize: 13,
+        labelGap: 1,
+        labelFont: AXIS_LABEL_FONT,
         // uPlot's default axis values render as epoch-derived dates.
         // Override values() to format numeric µs ticks ourselves.
         values: (_self, splits) => splits.map((v) => formatMicros(v)),
         grid: { show: true, stroke: "#dddddd", width: 1 },
-        ticks: { show: true, stroke: "#cccccc", width: 1 },
+        ticks: { show: true, stroke: "#cccccc", width: 1, size: 4 },
       },
       {
         scale: "y",
         label: yAxisLabel,
+        // Narrow left gutter mirrors the slim bottom axis so the trace
+        // area widens; 36 px still fits widest realistic mV/V labels.
+        size: 36,
+        gap: 2,
+        font: AXIS_FONT,
+        labelSize: 13,
+        labelGap: 1,
+        labelFont: AXIS_LABEL_FONT,
         grid: { show: true, stroke: "#dddddd", width: 1 },
-        ticks: { show: true, stroke: "#cccccc", width: 1 },
+        ticks: { show: true, stroke: "#cccccc", width: 1, size: 4 },
       },
     ],
     scales: {
