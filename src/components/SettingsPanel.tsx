@@ -14,8 +14,8 @@ type Props = {
  *      in a two-column grid so their Enable toggles read as parallel
  *      options.
  *
- * The file picker, dropzone, results CSV download, and PNG auto-save
- * toggle have moved to ImportsExportsPanel.
+ * The file picker, results CSV download, and PNG auto-save toggle
+ * have moved to ImportsExportsPanel.
  */
 export default function SettingsPanel({ settings, onSettingsChange }: Props) {
   /** Patch a subset of settings and forward the merged value to App. */

@@ -403,6 +403,28 @@ export default function App() {
     [addNotice, parseFileToEntry],
   );
 
+  // Global drag-and-drop: accept CSV drops anywhere on the page.
+  // dragover's preventDefault is required for the drop event to fire,
+  // and drop's preventDefault stops the browser opening the file.
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      const list = e.dataTransfer?.files;
+      if (list && list.length > 0) {
+        void handleFiles(list);
+      }
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [handleFiles]);
+
   /**
    * Receive a STS/PTP click from the chart. Replacing a pick on an axis
    * only overwrites that axis/kind slot; the other three picks persist.
@@ -638,7 +660,6 @@ export default function App() {
         <div className="settings-column">
           <ImportsExportsPanel
             onSelectFiles={handleFiles}
-            onDropFiles={handleFiles}
             canExport={results.length > 0}
             canExportPng={currentRaw !== null}
             autoDownloadPng={autoDownloadPng}
