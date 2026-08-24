@@ -38,7 +38,26 @@ import {
   type VelocityConfig,
 } from "./types";
 
-/** A single entry in the analysis queue. raw is null when the file failed to parse. */
+/**
+ * localStorage key for persisted display settings. The "v1" suffix
+ * lets a future storage-format change start fresh instead of fighting
+ * stale blobs from older app versions.
+ */
+const SETTINGS_STORAGE_KEY = "elastic-wave-analyzer/settings/v1";
+
+/**
+ * Outcome of the one-time settings read: values restored verbatim,
+ * nothing stored yet (first visit), or a stored blob that failed
+ * validation and was discarded in favour of the defaults.
+ */
+type StoredSettingsOutcome =
+  | { status: "loaded"; settings: DisplaySettings }
+  | { status: "none" }
+  | { status: "discarded" };
+
+/**
+ * A single entry in the analysis queue. raw is null when the file failed to parse.
+ */
 type QueueEntry = {
   /** Monotonic id so React keys stay stable across edits. */
   id: number;
@@ -55,8 +74,13 @@ type QueueEntry = {
  */
 export default function App() {
   const [queue, setQueue] = useState<QueueEntry[]>([]);
+  // One-shot localStorage read at mount: restored settings, "nothing
+  // saved", or "stored blob discarded as incompatible" (see below).
+  const [initialOutcome] = useState(loadStoredSettings);
   const [settings, setSettings] = useState<DisplaySettings>(
-    DEFAULT_DISPLAY_SETTINGS,
+    initialOutcome.status === "loaded"
+      ? initialOutcome.settings
+      : DEFAULT_DISPLAY_SETTINGS,
   );
   const [errors, setErrors] = useState<string[]>([]);
   // Picker state holds the four STS/PTP picks for the current file;
@@ -141,6 +165,25 @@ export default function App() {
       { id: noticeIdRef.current, kind, text },
     ]);
   }, []);
+
+  // Explain discarded settings once at mount: the user should know why
+  // their previous values did not survive an app update. Nothing stored
+  // (first visit) stays silent.
+  useEffect(() => {
+    if (initialOutcome.status === "discarded") {
+      addNotice(
+        "info",
+        "Saved settings were incompatible with this version; using defaults.",
+      );
+    }
+  }, [initialOutcome, addNotice]);
+
+  // Persist display settings after every change so a reload or revisit
+  // restores them; loadStoredSettings validates the blob on the way
+  // back in, guarding against schema drift between app versions.
+  useEffect(() => {
+    saveStoredSettings(settings);
+  }, [settings]);
 
   // Trigger auto-detection: while armed, derive the Trigger STS pick from
   // the first displayed sample at/above the threshold and derive PTP with
@@ -832,4 +875,71 @@ function estimateSampleIntervalUs(timeUs: number[]): number | null {
   return diffs.length % 2 === 1
     ? diffs[mid]
     : (diffs[mid - 1] + diffs[mid]) / 2;
+}
+
+/**
+ * Read and validate persisted display settings from localStorage. The
+ * stored object must match DEFAULT_DISPLAY_SETTINGS exactly — same key
+ * set, same value types, finite numbers, zoomIndex in range — so a code
+ * change that adds, removes, or renames any parameter invalidates old
+ * data wholesale and defaults apply instead of half-matching values.
+ */
+function loadStoredSettings(): StoredSettingsOutcome {
+  try {
+    const text = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!text) return { status: "none" };
+    const raw: unknown = JSON.parse(text);
+    // Only plain objects are valid payloads; arrays/null are garbage.
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      return { status: "discarded" };
+    }
+    const defs = DEFAULT_DISPLAY_SETTINGS as Record<
+      string,
+      number | boolean
+    >;
+    const record = raw as Record<string, unknown>;
+    const defKeys = Object.keys(defs);
+    // Exact key-set equality: extra keys mean storage newer than the
+    // code, missing keys mean storage older than it; both reject.
+    if (Object.keys(record).length !== defKeys.length) {
+      return { status: "discarded" };
+    }
+    for (const key of defKeys) {
+      const value = record[key];
+      if (typeof value !== typeof defs[key]) {
+        return { status: "discarded" };
+      }
+      // Finite check keeps NaN/Infinity from ever reaching an input.
+      if (typeof value === "number" && !Number.isFinite(value)) {
+        return { status: "discarded" };
+      }
+    }
+    const settings = record as unknown as DisplaySettings;
+    // Zoom index must address ZOOM_PERCENTAGES or charts would silently
+    // fall back to 100% while the label claims otherwise.
+    if (
+      settings.zoomIndex < 0 ||
+      settings.zoomIndex >= ZOOM_PERCENTAGES.length
+    ) {
+      return { status: "discarded" };
+    }
+    return { status: "loaded", settings };
+  } catch {
+    // Corrupt JSON or unavailable storage behaves like a fresh visit,
+    // but still warrants telling the user their values were dropped.
+    return { status: "discarded" };
+  }
+}
+
+/**
+ * Persist display settings after each change so the next visit starts
+ * where the user left off. Best-effort only: private mode and quota
+ * errors are swallowed because saving must never break the app.
+ */
+function saveStoredSettings(settings: DisplaySettings): void {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    /* storage unavailable: persistence is optional */
+  }
 }

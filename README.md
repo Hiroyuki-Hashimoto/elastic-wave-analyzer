@@ -19,6 +19,11 @@ previous-waveform overlay, and wave velocity calculation.
 CSV files are processed entirely in your browser — nothing is
 uploaded to any server.
 
+Display settings are saved automatically in your browser's local
+storage and restored on your next visit. If an update changes the
+settings parameters, previously saved values are discarded and the
+defaults are used instead.
+
 Intended for use on desktop browsers at around Full HD resolution
 (1920 × 1080).
 
