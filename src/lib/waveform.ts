@@ -3,6 +3,7 @@ import type {
   DisplaySettings,
   DisplayWaveform,
 } from "../types";
+import { applyReceiverLpf, estimateSamplingRateHz } from "./lpf";
 
 export const EXPECTED_HEADER = [
   "Time [s]",
@@ -144,8 +145,8 @@ export function resampleOnto(
 }
 
 /**
- * Apply display settings (gain, offset, trim) to a RawWaveform and
- * return the DisplayWaveform consumed by the chart.
+ * Apply display settings (gain, offset, trim, optional Receiver LPF) to
+ * a RawWaveform and return the DisplayWaveform consumed by the chart.
  *
  * trim range errors (trimStartUs >= trimEndUs) are NOT handled here;
  * callers must guard with validateTrim so an invalid range never
@@ -196,7 +197,19 @@ export function buildDisplayWaveform(
     return { timeUs: [], transmitterV: [], receiverV: [] };
   }
 
-  return { timeUs: timeOut, transmitterV: txOut, receiverV: rxOut };
+  // Zero-phase low-pass filter on the Receiver trace only; the Trigger
+  // stays untouched. Guards inside skip filtering when disabled or when
+  // the cutoff cannot satisfy Nyquist (warning surfaced via validateLpf).
+  let rxDisplay = rxOut;
+  if (settings.lpfEnabled) {
+    rxDisplay = applyReceiverLpf(
+      rxOut,
+      settings.lpfCutoffKHz,
+      estimateSamplingRateHz(timeOut),
+    );
+  }
+
+  return { timeUs: timeOut, transmitterV: txOut, receiverV: rxDisplay };
 }
 
 /**

@@ -197,8 +197,8 @@ body,
 /* Full-width feature rows: heading, Enable toggle and inline numeric
    fields share a single bordered line each to keep the panel compact.
    Identical fixed tracks on every card align Enable and both value
-   inputs vertically across the stack; the space below is reserved for
-   future LPF/HPF controls. */
+   inputs vertically across the stack; the LPF card ends the stack and
+   space below stays free for future HPF controls. */
 .settings-feature-stack {
   display: flex;
   flex-direction: column;

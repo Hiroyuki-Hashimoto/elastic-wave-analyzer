@@ -45,6 +45,10 @@ export type DisplaySettings = {
   distanceMm: number;
   /** Subtract this µs from each measured delta-T before computing velocity. */
   systemDelayUs: number;
+  /** When true, apply the zero-phase low-pass filter to the Receiver trace. */
+  lpfEnabled: boolean;
+  /** LPF cutoff in kHz; filtering skips silently at/below 0 and above Nyquist. */
+  lpfCutoffKHz: number;
 };
 
 /** Subset of DisplaySettings consumed by the velocity helper. */
@@ -160,4 +164,8 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   velocityEnabled: false,
   distanceMm: 100,
   systemDelayUs: 0,
+  // Receiver LPF starts off; 200 kHz clears a 7 kHz pulse with wide
+  // margin at typical 1 MS/s oscilloscope exports (Nyquist 500 kHz).
+  lpfEnabled: false,
+  lpfCutoffKHz: 200,
 };

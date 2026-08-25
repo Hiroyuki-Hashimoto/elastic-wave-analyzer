@@ -14,10 +14,11 @@ type Props = {
  *   2. One-line feature cards (Time trimming, Wave velocity, Trigger
  *      auto-detection, Cross-correlation): heading, Enable checkbox
  *      and unit-suffixed inputs share a single bordered row each.
- *
- * The space below the feature cards is intentionally left free for
- * future LPF/HPF filter controls. The file picker, results CSV
- * download, and PNG auto-save toggle live in ImportsExportsPanel.
+ *   3. LPF for receiver: same one-line card shape at the bottom of the
+ *      panel; enables a zero-phase Butterworth low-pass on the Receiver
+ *      trace. Room remains below for future HPF controls. The file
+ *      picker, results CSV download, and PNG auto-save toggle live in
+ *      ImportsExportsPanel.
  */
 export default function SettingsPanel({ settings, onSettingsChange }: Props) {
   /** Patch a subset of settings and forward the merged value to App. */
@@ -120,9 +121,8 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
       </section>
 
       {/* Feature toggles compressed to one bordered line each: heading,
-          Enable checkbox and inline inputs on the same row. The freed
-          space below this stack stays empty until LPF/HPF controls
-          are implemented. */}
+          Enable checkbox and inline inputs on the same row. The LPF card
+          ends the stack; space below stays free for future HPF controls. */}
       <section className="settings-feature-stack">
         <div className="settings-inline-card">
           <h3 className="settings-inline-heading">Time trimming</h3>
@@ -324,6 +324,45 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
               }}
             />
             <span className="field-unit">µs</span>
+          </label>
+        </div>
+
+        {/* Receiver low-pass filter: zero-phase (forward-backward
+            Butterworth), smoothing the trace without shifting picks in
+            time. Occupies the space reserved below the feature cards. */}
+        <div className="settings-inline-card">
+          <h3 className="settings-inline-heading">LPF for receiver</h3>
+          <label
+            className="field field-row settings-inline-enable"
+            title="Apply a zero-phase 4th-order Butterworth low-pass to the Receiver trace before picking."
+          >
+            <input
+              type="checkbox"
+              checked={settings.lpfEnabled}
+              onChange={(e) => update({ lpfEnabled: e.target.checked })}
+            />
+            <span>Enable</span>
+          </label>
+          <label
+            className="settings-inline-field"
+            title="Low-pass cutoff for the Receiver trace. Filtering is skipped when the cutoff reaches the Nyquist frequency."
+          >
+            <span className="field-label">Cutoff</span>
+            <input
+              className="inline-num"
+              type="number"
+              step="any"
+              min="0"
+              disabled={!settings.lpfEnabled}
+              value={settings.lpfCutoffKHz}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                // Negative or non-finite cutoff collapses to 0, which the
+                // filter treats as "off" like the Python reference.
+                update({ lpfCutoffKHz: Number.isFinite(v) && v >= 0 ? v : 0 });
+              }}
+            />
+            <span className="field-unit">kHz</span>
           </label>
         </div>
       </section>

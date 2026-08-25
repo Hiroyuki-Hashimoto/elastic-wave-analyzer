@@ -17,6 +17,10 @@ import {
 } from "./lib/picker";
 import { downloadResultsCsv, exportChartPng } from "./lib/exporter";
 import {
+  estimateSamplingRateHz,
+  validateLpf,
+} from "./lib/lpf";
+import {
   buildDisplayWaveform,
   readCsvFile,
   validateTrim,
@@ -156,6 +160,22 @@ export default function App() {
     if (trimError) list.push(trimError);
     return list;
   }, [errors, trimError]);
+
+  // LPF Nyquist warning: only meaningful with a loaded waveform whose
+  // sampling rate is known; validateLpf stays silent when disabled.
+  const lpfError = useMemo(() => {
+    if (!settings.lpfEnabled || !chartDisplay) return null;
+    return validateLpf(
+      settings.lpfCutoffKHz,
+      estimateSamplingRateHz(chartDisplay.timeUs),
+    );
+  }, [settings.lpfEnabled, settings.lpfCutoffKHz, chartDisplay]);
+
+  // Merge the LPF warning into the same errors panel list.
+  const allErrors = useMemo(
+    () => (lpfError ? [...effectiveErrors, lpfError] : effectiveErrors),
+    [effectiveErrors, lpfError],
+  );
 
   /**
    * Append a new notice to the in-app log. Mirrors the Python reference's
@@ -748,7 +768,7 @@ export default function App() {
             onSettingsChange={setSettings}
           />
           <NotificationsErrorsPanel
-            errors={effectiveErrors}
+            errors={allErrors}
             notices={notices}
           />
         </div>
