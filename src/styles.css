@@ -105,19 +105,13 @@ body,
 
 /* 2-column section used by Imports and Exports where the section has
    two children that should sit side by side. */
-.settings-section-grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  align-items: stretch;
-}
 
 /* Measurement grid hosts the explicit grid-row/grid-column placements
-   that keep Subtract initial voltage directly above Trigger gain. */
+   of the four bordered measurement cards. */
 .settings-measurement-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto;
   column-gap: 12px;
   row-gap: 8px;
 }
@@ -126,7 +120,37 @@ body,
 .grid-c1-r2 { grid-column: 1; grid-row: 2; }
 .grid-c2-r1 { grid-column: 2; grid-row: 1; }
 .grid-c2-r2 { grid-column: 2; grid-row: 2; }
-.grid-span2-r3 { grid-column: 1 / span 2; grid-row: 3; }
+
+/* Bordered card look shared by every cell of the measurement grid,
+   matching the feature cards below for a uniform panel surface. */
+.settings-item-card {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fafbfc;
+}
+
+/* Toggle-style measurement card: bold setting name on the left,
+   control (Enable checkbox or numeric input group) on the right,
+   mirroring the feature rows. */
+.settings-item-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-item-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Input + unit pair kept together at the card's right edge. */
+.settings-input-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 
 .settings-section-heading {
   margin: 0;
@@ -143,23 +167,94 @@ body,
   gap: 8px;
 }
 
-.settings-subsection {
+/* Full-width feature rows: heading, Enable toggle and inline numeric
+   fields share a single bordered line each to keep the panel compact.
+   Identical fixed tracks on every card align Enable and both value
+   inputs vertically across the stack; the space below is reserved for
+   future LPF/HPF controls. */
+.settings-feature-stack {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 10px;
+}
+
+.settings-inline-card {
+  /* Track widths tuned so the widest card (Cross-correlation) fits
+     the fixed 560px panel while keeping all rows aligned. */
+  --heading-w: 152px;
+  --enable-w: 58px;
+  --label-w: 70px;
+  --input-w: 52px;
+  display: grid;
+  grid-template-columns:
+    var(--heading-w) var(--enable-w) minmax(0, 1fr)
+    minmax(0, 1fr);
+  column-gap: 4px;
+  align-items: center;
+  padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: #fafbfc;
 }
 
-.settings-subsection-heading {
+/* Same typeface as the measurement card names (12px semibold,
+   sentence case) so every setting name on the panel reads alike. */
+.settings-inline-heading {
   margin: 0;
   font-size: 12px;
   font-weight: 600;
+  /* Keep the card name on the same single row even when it is long. */
+  white-space: nowrap;
+}
+
+/* Tighter than .field-row's 8px so the checkbox + "Enable" pair stays
+   inside its narrow aligned column. */
+.settings-inline-card .settings-inline-enable {
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* Label / input / unit triple laid out horizontally inside a feature
+   card (e.g. "Start [ 50 ] µs"). The fixed label width pins each
+   input's x position, so inputs line up across cards regardless of
+   how long their labels are. */
+.settings-inline-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.settings-inline-field .field-label {
+  width: var(--label-w);
+  /* Right-align labels so they sit flush against their input box. */
+  text-align: right;
+}
+
+/* Compact input sized to the shared aligned column. */
+.settings-inline-field .inline-num {
+  width: var(--input-w);
+}
+
+/* Hide spinner buttons: they would crowd the 52px field; typing and
+   arrow keys still step the value. */
+.settings-inline-field input[type="number"]::-webkit-outer-spin-button,
+.settings-inline-field input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.settings-inline-field input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.field-unit {
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  /* Explicit size: these spans may sit outside any .field wrapper
+     (e.g. measurement toggle cards) and would otherwise inherit the
+     browser's default ~16px instead of matching other labels. */
+  font-size: 12px;
 }
 
 .settings-column {
@@ -230,40 +325,27 @@ body,
   gap: 8px;
 }
 
-/* Two half-width fields side by side inside a subsection (e.g. the
-   CC window's Before / After inputs). */
-.field-row-split {
-  display: flex;
-  gap: 8px;
-}
-
-.field-row-split .field {
-  flex: 1 1 0;
+/* Compact fixed-width numeric input used by every inline field.
+   Styled here (not via .field) so it renders identically whether it
+   sits in a measurement card or a feature card; min-width:0 lets the
+   row shrink gracefully on narrow panels. */
+.inline-num {
+  width: 76px;
   min-width: 0;
-}
-
-/* Inputs fill their half-cell instead of forcing the grid column wide
-   with their intrinsic width (grid tracks are minmax(auto, 1fr)). */
-.field-row-split input[type="number"] {
-  width: 100%;
-  min-width: 0;
-}
-
-.field-label {
-  color: var(--muted);
-}
-
-.field input[type="number"] {
-  padding: 6px 8px;
+  padding: 4px 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 13px;
 }
 
-.field input[type="number"]:disabled {
+.inline-num:disabled {
   background: var(--bg);
   color: var(--muted);
   cursor: not-allowed;
+}
+
+.field-label {
+  color: var(--muted);
 }
 
 .errors-heading {
