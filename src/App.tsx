@@ -103,6 +103,9 @@ export default function App() {
   // CSV columns. Reset to "chart" whenever a new file is loaded so
   // the user always sees the picking view first.
   const [activeTab, setActiveTab] = useState<"chart" | "results">("chart");
+  // True while a file drag is in progress over the window; drives the
+  // full-screen "Drop CSV file(s) here" overlay.
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // The current entry is the single 'current' row in the queue, or null.
   const currentEntry = useMemo(
@@ -449,22 +452,54 @@ export default function App() {
   // Global drag-and-drop: accept CSV drops anywhere on the page.
   // dragover's preventDefault is required for the drop event to fire,
   // and drop's preventDefault stops the browser opening the file.
+  // dragenter/dragleave drive a depth counter (dragenter fires before
+  // dragleave when moving between children, so the count stays stable)
+  // that shows the drop overlay only while files hover over the window.
   useEffect(() => {
+    // Nesting depth of in-flight file drags; > 0 means overlay visible.
+    let dragDepth = 0;
+    /** True only for real file drags, not text or element drags. */
+    const isFileDrag = (e: DragEvent) =>
+      Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const onDragEnter = (e: DragEvent) => {
+      if (!isFileDrag(e)) return;
+      dragDepth += 1;
+      setIsDragOver(true);
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (!isFileDrag(e)) return;
+      // Clamp at zero so stray leave events cannot underflow the count.
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) setIsDragOver(false);
+    };
     const onDragOver = (e: DragEvent) => {
       e.preventDefault();
     };
+    const endDrag = () => {
+      dragDepth = 0;
+      setIsDragOver(false);
+    };
     const onDrop = (e: DragEvent) => {
       e.preventDefault();
+      endDrag();
       const list = e.dataTransfer?.files;
       if (list && list.length > 0) {
         void handleFiles(list);
       }
     };
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragleave", onDragLeave);
     window.addEventListener("dragover", onDragOver);
     window.addEventListener("drop", onDrop);
+    // Safety net: some browsers skip dragleave when the drag ends by
+    // other means (e.g. Escape), which would otherwise stick the overlay.
+    window.addEventListener("dragend", endDrag);
     return () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragleave", onDragLeave);
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("drop", onDrop);
+      window.removeEventListener("dragend", endDrag);
     };
   }, [handleFiles]);
 
@@ -779,6 +814,14 @@ export default function App() {
           )}
         </section>
       </main>
+      {/* Full-window drop hint shown while files hover over the page.
+          Purely visual (pointer-events: none) so the window-level drop
+          handling above is unaffected. */}
+      {isDragOver ? (
+        <div className="drop-overlay" aria-hidden="true">
+          <div className="drop-overlay-inner">Drop CSV file(s) here</div>
+        </div>
+      ) : null}
     </div>
   );
 }

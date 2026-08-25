@@ -47,6 +47,33 @@ body,
   padding: 16px;
 }
 
+/* Full-window drag feedback while files hover over the page:
+   translucent white wash plus a dashed accent frame telling the user
+   CSV drops are accepted anywhere on screen. pointer-events stays off
+   so the window-level drop handling is never blocked. */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.65);
+  display: flex;
+  pointer-events: none;
+}
+
+.drop-overlay-inner {
+  flex: 1;
+  border: 3px dashed var(--accent);
+  border-radius: 8px;
+  background: rgba(31, 119, 180, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
 .settings-panel {
   background: var(--panel);
   border: 1px solid var(--border);
