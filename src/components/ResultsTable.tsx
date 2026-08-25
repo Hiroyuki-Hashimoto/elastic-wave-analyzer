@@ -14,7 +14,7 @@ type Props = {
  * to one. Every confirmed row accumulated by the app is shown in
  * insertion order so the user can scan from the first file to the
  * last; vertical scroll handles long sessions, horizontal scroll
- * keeps the 16 columns readable on narrow panels. Cell formatting
+ * keeps the 12 columns readable on narrow panels. Cell formatting
  * matches exportResultsCsv via the shared formatAnalysisResultCells
  * helper, so the table and the downloaded CSV never drift.
  *

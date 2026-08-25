@@ -9,18 +9,14 @@ export type ExportInput = {
 /** Exact column order of the exported CSV header. */
 export const RESULTS_CSV_HEADER = [
   "File_Name",
-  "Trigger_STS_time(us)",
-  "Trigger_STS_voltage(V)",
-  "Trigger_PTP_time(us)",
-  "Trigger_PTP_voltage(V)",
-  "Receiver_STS_time(us)",
-  "Receiver_STS_voltage(V)",
-  "Receiver_PTP_time(us)",
-  "Receiver_PTP_voltage(V)",
-  "STS_propagation_time(us)",
-  "PTP_propagation_time(us)",
-  "STS_propagation_time_corrected(us)",
-  "PTP_propagation_time_corrected(us)",
+  "Trig_STS_time(us)",
+  "Trig_PTP_time(us)",
+  "Rec_STS_time(us)",
+  "Rec_PTP_time(us)",
+  "STS_deltaT(us)",
+  "PTP_deltaT(us)",
+  "STS_deltaT_corrected(us)",
+  "PTP_deltaT_corrected(us)",
   "STS_velocity(m/s)",
   "PTP_velocity(m/s)",
   "Distance(mm)",
@@ -28,8 +24,6 @@ export const RESULTS_CSV_HEADER = [
 
 /** Decimal precision for time / delta-T columns (µs). */
 export const TIME_DECIMALS = 1;
-/** Decimal precision for voltage columns (V). */
-export const VOLTAGE_DECIMALS = 6;
 /** Decimal precision for velocity columns (m/s). */
 export const VELOCITY_DECIMALS = 3;
 /** Decimal precision for the distance setting column (mm). */
@@ -51,7 +45,7 @@ export function formatNumberCell(
 }
 
 /**
- * Format one AnalysisResult as the 16 string cells in CSV header
+ * Format one AnalysisResult as the 12 string cells in CSV header
  * order. Cell 0 is the file name (CSV-escaped); the rest are numeric
  * cells formatted with the column-specific decimal precision. Returns
  * the cells in the same order as RESULTS_CSV_HEADER so callers can
@@ -62,17 +56,13 @@ export function formatAnalysisResultCells(r: AnalysisResult): string[] {
   return [
     escapeCsvField(r.fileName),
     formatNumberCell(r.triggerStsTimeUs, TIME_DECIMALS),
-    formatNumberCell(r.triggerStsVoltageV, VOLTAGE_DECIMALS),
     formatNumberCell(r.triggerPtpTimeUs, TIME_DECIMALS),
-    formatNumberCell(r.triggerPtpVoltageV, VOLTAGE_DECIMALS),
     formatNumberCell(r.receiverStsTimeUs, TIME_DECIMALS),
-    formatNumberCell(r.receiverStsVoltageV, VOLTAGE_DECIMALS),
     formatNumberCell(r.receiverPtpTimeUs, TIME_DECIMALS),
-    formatNumberCell(r.receiverPtpVoltageV, VOLTAGE_DECIMALS),
-    formatNumberCell(r.stsPropagationTimeUs, TIME_DECIMALS),
-    formatNumberCell(r.ptpPropagationTimeUs, TIME_DECIMALS),
-    formatNumberCell(r.stsPropagationTimeCorrectedUs, TIME_DECIMALS),
-    formatNumberCell(r.ptpPropagationTimeCorrectedUs, TIME_DECIMALS),
+    formatNumberCell(r.stsDeltaTUs, TIME_DECIMALS),
+    formatNumberCell(r.ptpDeltaTUs, TIME_DECIMALS),
+    formatNumberCell(r.stsDeltaTCorrectedUs, TIME_DECIMALS),
+    formatNumberCell(r.ptpDeltaTCorrectedUs, TIME_DECIMALS),
     formatNumberCell(r.stsVelocityMps, VELOCITY_DECIMALS),
     formatNumberCell(r.ptpVelocityMps, VELOCITY_DECIMALS),
     formatNumberCell(r.distanceMm, DISTANCE_DECIMALS),
@@ -82,7 +72,7 @@ export function formatAnalysisResultCells(r: AnalysisResult): string[] {
 /**
  * Serialize an array of AnalysisResult rows into the exact header / row
  * order required by the spec. Null cells are written as empty fields;
- * time / delta-T use 1 decimal place, voltage uses 6. Strings are
+ * time / delta-T use 1 decimal place, velocity 3. Strings are
  * escaped per CSV rules so a file name containing a comma or quote
  * cannot corrupt the row layout.
  */

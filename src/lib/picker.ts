@@ -266,17 +266,13 @@ export function pickerToAnalysisResult(
   const empty: AnalysisResult = {
     fileName,
     triggerStsTimeUs: null,
-    triggerStsVoltageV: null,
     triggerPtpTimeUs: null,
-    triggerPtpVoltageV: null,
     receiverStsTimeUs: null,
-    receiverStsVoltageV: null,
     receiverPtpTimeUs: null,
-    receiverPtpVoltageV: null,
-    stsPropagationTimeUs: null,
-    ptpPropagationTimeUs: null,
-    stsPropagationTimeCorrectedUs: null,
-    ptpPropagationTimeCorrectedUs: null,
+    stsDeltaTUs: null,
+    ptpDeltaTUs: null,
+    stsDeltaTCorrectedUs: null,
+    ptpDeltaTCorrectedUs: null,
     stsVelocityMps: null,
     ptpVelocityMps: null,
     distanceMm: null,
@@ -304,8 +300,8 @@ export function pickerToAnalysisResult(
   // velocity-related columns when velocity calculation is OFF.
   let stsVelocityMps: number | null = null;
   let ptpVelocityMps: number | null = null;
-  let stsPropagationTimeCorrectedUs: number | null = null;
-  let ptpPropagationTimeCorrectedUs: number | null = null;
+  let stsDeltaTCorrectedUs: number | null = null;
+  let ptpDeltaTCorrectedUs: number | null = null;
   let distanceMm: number | null = null;
   if (velocityConfig?.enabled) {
     stsVelocityMps = computeVelocityMps(
@@ -318,31 +314,27 @@ export function pickerToAnalysisResult(
       velocityConfig.distanceMm,
       velocityConfig.systemDelayUs,
     );
-    // Corrected propagation time in µs: raw propagation time minus the
-    // user-supplied system delay. Mathematically it can go negative if
-    // the delay exceeds the measurement, which the Enter-time guard in
-    // App.tsx already blocks from being stored. We still emit it as-is
-    // so the corrected column is a faithful (delta - delay) snapshot.
-    stsPropagationTimeCorrectedUs = stsDeltaTUs - velocityConfig.systemDelayUs;
-    ptpPropagationTimeCorrectedUs = ptpDeltaTUs - velocityConfig.systemDelayUs;
+    // Corrected delta-T in µs: raw delta-T minus the user-supplied
+    // system delay. Mathematically it can go negative if the delay
+    // exceeds the measurement, which the Enter-time guard in App.tsx
+    // already blocks from being stored. We still emit it as-is so the
+    // corrected column is a faithful (delta - delay) snapshot.
+    stsDeltaTCorrectedUs = stsDeltaTUs - velocityConfig.systemDelayUs;
+    ptpDeltaTCorrectedUs = ptpDeltaTUs - velocityConfig.systemDelayUs;
     distanceMm = velocityConfig.distanceMm;
   }
 
   return {
     fileName,
     triggerStsTimeUs: stsStartUs,
-    triggerStsVoltageV: triggerSts.voltage,
     triggerPtpTimeUs: ptpStartUs,
-    triggerPtpVoltageV: triggerPtp.voltage,
     receiverStsTimeUs: stsArrivalUs,
-    receiverStsVoltageV: receiverSts.voltage,
     receiverPtpTimeUs: ptpArrivalUs,
-    receiverPtpVoltageV: receiverPtp.voltage,
-    // Propagation time in µs: receiver time minus trigger time for STS and PTP.
-    stsPropagationTimeUs: stsDeltaTUs,
-    ptpPropagationTimeUs: ptpDeltaTUs,
-    stsPropagationTimeCorrectedUs,
-    ptpPropagationTimeCorrectedUs,
+    // Delta-T in µs: receiver time minus trigger time for STS and PTP.
+    stsDeltaTUs,
+    ptpDeltaTUs,
+    stsDeltaTCorrectedUs,
+    ptpDeltaTCorrectedUs,
     stsVelocityMps,
     ptpVelocityMps,
     distanceMm,

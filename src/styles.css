@@ -607,7 +607,7 @@ body,
 .results-table-filename {
   word-break: break-all;
   white-space: normal;
-  max-width: 200px;
+  max-width: 300px;
 }
 
 @media (max-width: 760px) {

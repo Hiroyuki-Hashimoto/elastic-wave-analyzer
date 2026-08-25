@@ -61,23 +61,19 @@ export type DisplayWaveform = {
   receiverV: number[];
 };
 
-/** Per-file STS/PTP picks and propagation time (null until picked). */
+/** Per-file STS/PTP picks and delta-T results (null until picked). */
 export type AnalysisResult = {
   fileName: string;
   triggerStsTimeUs: number | null;
-  triggerStsVoltageV: number | null;
   triggerPtpTimeUs: number | null;
-  triggerPtpVoltageV: number | null;
   receiverStsTimeUs: number | null;
-  receiverStsVoltageV: number | null;
   receiverPtpTimeUs: number | null;
-  receiverPtpVoltageV: number | null;
-  stsPropagationTimeUs: number | null;
-  ptpPropagationTimeUs: number | null;
-  /** Propagation time after subtracting system delay, in µs; null when not computed. */
-  stsPropagationTimeCorrectedUs: number | null;
-  /** Propagation time after subtracting system delay, in µs; null when not computed. */
-  ptpPropagationTimeCorrectedUs: number | null;
+  /** Receiver minus Trigger pick time for STS, in µs. */
+  stsDeltaTUs: number | null;
+  ptpDeltaTUs: number | null;
+  /** Delta-T after subtracting system delay, in µs; null when not computed. */
+  stsDeltaTCorrectedUs: number | null;
+  ptpDeltaTCorrectedUs: number | null;
   /** Wave velocity from STS picks, in m/s; null when not computed. */
   stsVelocityMps: number | null;
   /** Wave velocity from PTP picks, in m/s; null when not computed. */
