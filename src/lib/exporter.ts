@@ -50,9 +50,16 @@ export function formatNumberCell(
  * cells formatted with the column-specific decimal precision. Returns
  * the cells in the same order as RESULTS_CSV_HEADER so callers can
  * zip them with the header. Used by both the CSV exporter and the
- * in-app results table.
+ * in-app results table. Passing null (an unprocessed queue row) emits
+ * empty numeric cells so pending files render as blank rows.
  */
-export function formatAnalysisResultCells(r: AnalysisResult): string[] {
+export function formatAnalysisResultCells(
+  r: AnalysisResult | null,
+): string[] {
+  if (!r) {
+    // Header minus File_Name: every value cell empty.
+    return ["", ...RESULTS_CSV_HEADER.slice(1).map(() => "")];
+  }
   return [
     escapeCsvField(r.fileName),
     formatNumberCell(r.triggerStsTimeUs, TIME_DECIMALS),

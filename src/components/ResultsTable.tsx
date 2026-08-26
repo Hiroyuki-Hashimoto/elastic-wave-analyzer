@@ -1,42 +1,59 @@
 import { useEffect, useRef } from "react";
-import {
-  RESULTS_CSV_HEADER,
-  formatAnalysisResultCells,
-} from "../lib/exporter";
+import { RESULTS_CSV_HEADER, formatAnalysisResultCells } from "../lib/exporter";
 import type { AnalysisResult } from "../types";
 
+/** One merged row: a queue entry joined with its result (if any). */
+export type ResultRow = {
+  fileName: string;
+  status: "pending" | "current" | "confirmed" | "canceled" | "invalid";
+  result: AnalysisResult | null;
+};
+
 type Props = {
-  results: AnalysisResult[];
+  rows: ResultRow[];
 };
 
 /**
- * Read-only scrollable table that mirrors the CSV export columns one
- * to one. Every confirmed row accumulated by the app is shown in
- * insertion order so the user can scan from the first file to the
- * last; vertical scroll handles long sessions, horizontal scroll
- * keeps the 12 columns readable on narrow panels. Cell formatting
- * matches exportResultsCsv via the shared formatAnalysisResultCells
- * helper, so the table and the downloaded CSV never drift.
- *
- * On mount the wrapper scrolls to the bottom row so the user lands
- * on the newest result. Since the parent unmounts this component
- * whenever another tab is active, the mount-time scroll also fires
- * each time the user switches to the Results tab.
+ * Dot colour per terminal state; pending/current stay dotless so the
+ * eye only catches finished business (user-requested semantics).
  */
-export default function ResultsTable({ results }: Props) {
+const STATUS_DOT: Partial<
+  Record<ResultRow["status"], { color: string; label: string }>
+> = {
+  confirmed: { color: "#2ca02c", label: "Confirmed" },
+  canceled: { color: "#e68a00", label: "Canceled" },
+  invalid: { color: "#b00020", label: "Invalid file" },
+};
+
+/**
+ * Read-only scrollable table under the Receiver chart that merges the
+ * whole batch queue with every stored result: pending files show blank
+ * numeric cells, confirmed files their values, and the leftmost narrow
+ * column carries a coloured dot for terminal states only (confirmed /
+ * canceled / invalid). Cell formatting matches exportResultsCsv via
+ * the shared formatAnalysisResultCells helper, so the table and the
+ * downloaded CSV never drift.
+ *
+ * On mount — and on every append while the user already sits near the
+ * bottom — the wrapper scrolls to the newest row so a running session
+ * stays visible without yanking manual scrolling.
+ */
+export default function ResultsTable({ rows }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Mount-time only (deps = []) so manual scrolling inside the table
-  // is not yanked back to the bottom by every appended row.
+  // Follow new rows only while pinned near the bottom (40 px window);
+  // scrolling up to inspect history is never interrupted.
   useEffect(() => {
     const el = wrapperRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, []);
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distance < 40) el.scrollTop = el.scrollHeight;
+  }, [rows.length]);
 
-  if (results.length === 0) {
+  if (rows.length === 0) {
     return (
       <div className="empty-state">
-        No results yet. Confirm a file with Enter to add one.
+        No files yet. Select or drop CSV file(s) to start.
       </div>
     );
   }
@@ -45,6 +62,8 @@ export default function ResultsTable({ results }: Props) {
       <table className="results-table">
         <thead>
           <tr>
+            {/* Narrow status column: header intentionally blank. */}
+            <th scope="col" className="results-table-status" aria-label="Status" />
             {RESULTS_CSV_HEADER.map((h) => (
               <th key={h} scope="col">
                 {h}
@@ -53,20 +72,29 @@ export default function ResultsTable({ results }: Props) {
           </tr>
         </thead>
         <tbody>
-          {results.map((r, i) => {
-            const cells = formatAnalysisResultCells(r);
-            // Stable key from fileName + insertion index; fileName alone
-            // could collide when the same file is loaded twice.
-            const key = `${i}-${r.fileName}`;
+          {rows.map((row, i) => {
+            const cells = formatAnalysisResultCells(row.result);
+            // Stable key from insertion index + fileName; fileName alone
+            // could collide when the same file loads twice.
+            const key = `${i}-${row.fileName}`;
+            const dot = STATUS_DOT[row.status];
             return (
               <tr key={key}>
-                {cells.map((cell, j) => (
-                  <td
-                    key={j}
-                    className={
-                      j === 0 ? "results-table-filename" : "results-table-cell"
-                    }
-                  >
+                <td className="results-table-status">
+                  {dot ? (
+                    <span
+                      className="status-dot"
+                      style={{ background: dot.color }}
+                      title={dot.label}
+                      aria-label={dot.label}
+                    />
+                  ) : null}
+                </td>
+                {/* File name comes from the row itself so pending rows
+                    keep theirs; value cells mirror the CSV exporter. */}
+                <td className="results-table-filename">{row.fileName}</td>
+                {cells.slice(1).map((cell, j) => (
+                  <td key={j} className="results-table-cell">
                     {cell}
                   </td>
                 ))}

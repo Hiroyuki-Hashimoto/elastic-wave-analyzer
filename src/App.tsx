@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ImportsExportsPanel from "./components/ImportsExportsPanel";
 import NotificationsErrorsPanel from "./components/NotificationsErrorsPanel";
-import ResultsTable from "./components/ResultsTable";
+import ResultsTable, { type ResultRow } from "./components/ResultsTable";
 import SettingsPanel from "./components/SettingsPanel";
 import WaveformChart, {
   type WaveformChartHandle,
@@ -102,11 +102,6 @@ export default function App() {
   const chartHandleRef = useRef<WaveformChartHandle | null>(null);
   // When true, Enter-confirm also auto-downloads the current chart as PNG.
   const [autoDownloadPng, setAutoDownloadPng] = useState(false);
-  // Active tab in the chart-area: "chart" shows the waveform pick
-  // view; "results" shows the accumulated results table mirroring the
-  // CSV columns. Reset to "chart" whenever a new file is loaded so
-  // the user always sees the picking view first.
-  const [activeTab, setActiveTab] = useState<"chart" | "results">("chart");
   // True while a file drag is in progress over the window; drives the
   // full-screen "Drop CSV file(s) here" overlay.
   const [isDragOver, setIsDragOver] = useState(false);
@@ -176,6 +171,27 @@ export default function App() {
     () => (lpfError ? [...effectiveErrors, lpfError] : effectiveErrors),
     [effectiveErrors, lpfError],
   );
+
+  // Merged Results rows in chronological order: results from older
+  // batches (files no longer queued) sit at the TOP so history reads
+  // old-to-new downward, followed by the live batch in load order.
+  // Pending and current rows show blank value cells until confirmed.
+  const resultRows = useMemo<ResultRow[]>(() => {
+    const rows: ResultRow[] = [];
+    for (const r of results) {
+      if (!queue.some((e) => e.fileName === r.fileName)) {
+        rows.push({ fileName: r.fileName, status: "confirmed", result: r });
+      }
+    }
+    for (const e of queue) {
+      rows.push({
+        fileName: e.fileName,
+        status: e.status,
+        result: results.find((r) => r.fileName === e.fileName) ?? null,
+      });
+    }
+    return rows;
+  }, [queue, results]);
 
   /**
    * Append a new notice to the in-app log. Mirrors the Python reference's
@@ -456,9 +472,6 @@ export default function App() {
       ]);
       // Reset picker for the new file (settings are kept across files).
       setPicker(emptyPickerState());
-      // Snap the tab back to Chart so the picking view is the first
-      // thing the user sees after a fresh load.
-      setActiveTab("chart");
       if (entries.length > 1) {
         addNotice(
           "info",
@@ -781,57 +794,34 @@ export default function App() {
             </p>
           ) : null}
 
-          {/* Tab bar: Chart (waveform + picking) and Results (scannable
-              history of every confirmed row). */}
-          <div className="results-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "chart"}
-              className={`results-tab-button ${activeTab === "chart" ? "active" : ""}`}
-              onClick={() => setActiveTab("chart")}
-            >
-              Chart
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "results"}
-              className={`results-tab-button ${activeTab === "results" ? "active" : ""}`}
-              onClick={() => setActiveTab("results")}
-            >
-              Results ({results.length})
-            </button>
+          {/* Charts and Results share one page: the plots absorb the
+              leftover height while the results table keeps a fixed
+              share below. The chart stack is ALWAYS mounted — with no
+              waveform loaded (or after the batch finishes) only its
+              content swaps to a placeholder, so the Results table
+              never jumps upward. */}
+          {currentRaw ? <PickGuidance /> : null}
+          <div className="chart-stack">
+            {currentRaw && chartDisplay ? (
+              <WaveformChart
+                ref={chartHandleRef}
+                display={chartDisplay}
+                picker={picker}
+                onPick={handlePick}
+                peakWidthUs={settings.peakWidthUs}
+                dTUs={dTUs ?? 0}
+                zoomIndex={settings.zoomIndex}
+                prevOverlay={
+                  settings.overlayPrevEnabled ? prevOverlay : null
+                }
+              />
+            ) : (
+              <div className="empty-state">
+                No data loaded. Please select a CSV file.
+              </div>
+            )}
           </div>
-
-          {/* Only the active tab is mounted so the chart's uPlot
-              instances are torn down between sessions and the inactive
-              ResultsTable does not waste cycles on hidden rows. */}
-          {activeTab === "chart" ? (
-            <>
-              {currentRaw ? <PickGuidance /> : null}
-              {currentRaw && chartDisplay ? (
-                <WaveformChart
-                  ref={chartHandleRef}
-                  display={chartDisplay}
-                  picker={picker}
-                  onPick={handlePick}
-                  peakWidthUs={settings.peakWidthUs}
-                  dTUs={dTUs ?? 0}
-                  zoomIndex={settings.zoomIndex}
-                  prevOverlay={
-                    settings.overlayPrevEnabled ? prevOverlay : null
-                  }
-                />
-              ) : (
-                <div className="empty-state">
-                  No data loaded. Please select a CSV file.
-                </div>
-              )}
-            </>
-          ) : (
-            <ResultsTable results={results} />
-          )}
+          <ResultsTable rows={resultRows} />
         </section>
       </main>
       {/* Full-window drop hint shown while files hover over the page.

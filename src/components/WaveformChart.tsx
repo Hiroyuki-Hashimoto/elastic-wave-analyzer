@@ -33,8 +33,9 @@ const MARKER_LABEL_GAP_PX = 7;
 const AXIS_FONT =
   '11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
-/** Axis caption font ("Time (µs)", "Trigger (V)", ...), bold like uPlot's. */
-const AXIS_LABEL_FONT = `bold ${AXIS_FONT}`;
+/** Axis caption font ("Time (µs)", "Trigger with gain (V)", ...), bold
+ * and enlarged so the labels stay readable without the old DOM titles. */
+const AXIS_LABEL_FONT = 'bold 14px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 import type {
   DisplayWaveform,
   PickAxis,
@@ -238,7 +239,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       receiverRef.current?.clientHeight || FALLBACK_CHART_HEIGHT;
 
     const triggerOpts = buildOptions(
-      "Trigger (V)",
+      "Trigger with gain (V)",
       "V",
       trigWin.min,
       trigWin.max,
@@ -469,10 +470,8 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
   return (
     <div className="chart-stack">
       <div className="chart-block">
-        {/* DOM title keeps uPlot title-less: its built-in .u-title div
-            would add ~27 px above the canvas and overflow the flex-sized
-            host, covering the scrollbar with the transparent .u-over. */}
-        <div className="chart-title">Trigger (with gain)</div>
+        {/* No DOM chart title: the freed height goes straight to the
+            plots, and the y-axis captions identify each trace. */}
         <div className="chart-host" ref={triggerRef} />
         <ChartScrollbar
           axis="trigger"
@@ -483,7 +482,6 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
         />
       </div>
       <div className="chart-block">
-        <div className="chart-title">Receiver</div>
         <div className="chart-host" ref={receiverRef} />
         <ChartScrollbar
           axis="receiver"
@@ -601,9 +599,8 @@ function buildOptions(
     width,
     height,
     // Native legend is off: a bare two-line cursor tooltip replaces it.
-    // The chart title is a plain DOM div ABOVE the host (see JSX) —
-    // keeping uPlot title-less makes root height == canvas height, so
-    // the plot can never spill over the scrollbar below it.
+    // uPlot runs title-less so root height == canvas height and the
+    // plot can never spill over the scrollbar below it.
     legend: { show: false },
     series: [
       {
@@ -642,7 +639,7 @@ function buildOptions(
         size: 22,
         gap: 2,
         font: AXIS_FONT,
-        labelSize: 13,
+        labelSize: 18,
         labelGap: 1,
         labelFont: AXIS_LABEL_FONT,
         // uPlot's default axis values render as epoch-derived dates.
@@ -655,11 +652,12 @@ function buildOptions(
         scale: "y",
         label: yAxisLabel,
         // Narrow left gutter mirrors the slim bottom axis so the trace
-        // area widens; 36 px still fits widest realistic mV/V labels.
+        // area widens; the rotated caption needs a wider strip than the
+        // horizontal one or its bold glyphs get clipped mid-letter.
         size: 36,
         gap: 2,
         font: AXIS_FONT,
-        labelSize: 13,
+        labelSize: 24,
         labelGap: 1,
         labelFont: AXIS_LABEL_FONT,
         grid: { show: true, stroke: "#dddddd", width: 1 },
