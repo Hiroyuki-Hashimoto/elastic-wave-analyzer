@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ImportsExportsPanel from "./components/ImportsExportsPanel";
+import ImportMappingDialog, {
+  type MappingRequest,
+} from "./components/ImportMappingDialog";
 import NotificationsErrorsPanel from "./components/NotificationsErrorsPanel";
 import ResultsTable, { type ResultRow } from "./components/ResultsTable";
 import SettingsPanel from "./components/SettingsPanel";
@@ -22,8 +25,10 @@ import {
 } from "./lib/lpf";
 import {
   guessImportSpec,
+  matchesRememberedSpec,
   parseWithSpec,
   readFileText,
+  STANDARD_CSV_SPEC,
 } from "./lib/importer";
 import {
   buildDisplayWaveform,
@@ -43,6 +48,8 @@ import {
   type PickerState,
   type PrevOverlay,
   type RawWaveform,
+  type DetectedImport,
+  type ImportSpec,
   type VelocityConfig,
 } from "./types";
 
@@ -109,6 +116,21 @@ export default function App() {
   // True while a file drag is in progress over the window; drives the
   // full-screen "Drop data file(s) here" overlay.
   const [isDragOver, setIsDragOver] = useState(false);
+  // Last user-confirmed import mapping, reused silently when a future
+  // file has the same shape (same delimiter, same numeric mapped cells).
+  // null until the user confirms one in the mapping dialog.
+  const [manualSpec, setManualSpec] = useState<ImportSpec | null>(null);
+  // Non-null while the mapping dialog is open. pending holds files that
+  // could not be auto-parsed; an empty list means "edit saved mapping".
+  const [mappingRequest, setMappingRequest] = useState<MappingRequest | null>(
+    null,
+  );
+  // Stash for the partially-built queue and unresolved candidates while
+  // the dialog is open; refs keep them off the render path.
+  const pendingCandidatesRef = useRef<
+    { fileName: string; text: string; detected: DetectedImport | null }[]
+  >([]);
+  const queuePrefixRef = useRef<QueueEntry[]>([]);
 
   // The current entry is the single 'current' row in the queue, or null.
   const currentEntry = useMemo(
@@ -370,52 +392,78 @@ export default function App() {
   const isSupportedFile = (file: File): boolean =>
     /\.(csv|tsv|txt)$/i.test(file.name) || file.type.startsWith("text/");
 
-  /**
-   * Parse one file into a queue entry, recording either a parsed raw
-   * waveform or a parse error. The file is NOT added to the queue when
-   * it is unsupported (wrong extension / MIME).
-   */
-  const parseFileToEntry = useCallback(
-    async (file: File): Promise<QueueEntry | null> => {
-      if (!isSupportedFile(file)) {
-        addNotice("error", `Unsupported file: ${file.name}`);
-        return null;
-      }
+  /** Build a queue entry from a parse attempt, recording id + error. */
+  const entryFromParse = useCallback(
+    (fileName: string, attempt: () => RawWaveform): QueueEntry => {
       queueIdRef.current += 1;
       const id = queueIdRef.current;
       try {
-        // Read fully in-browser, sniff the format, then parse under the
-        // detected mapping (units normalized to µs / V inside).
-        const text = await readFileText(file);
-        const detected = guessImportSpec(text);
-        if (!detected) {
-          throw new Error(
-            "Unrecognized format: no numeric table found in the file.",
-          );
-        }
-        const parsed = parseWithSpec(text, file.name, detected.spec);
-        addNotice(
-          "info",
-          `Loaded ${file.name} (${parsed.timeUs.length} samples) via ` +
-            `${detected.kind} mapping.`,
-        );
+        const raw = attempt();
         return {
           id,
-          fileName: file.name,
-          raw: parsed,
+          fileName,
+          raw,
           status: "pending",
           errorMessage: null,
         };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        addNotice("error", `${file.name}: ${msg}`);
+        addNotice("error", `${fileName}: ${msg}`);
         return {
           id,
-          fileName: file.name,
+          fileName,
           raw: null,
           status: "invalid",
           errorMessage: msg,
         };
+      }
+    },
+    [addNotice],
+  );
+
+  /**
+   * Parse one already-read file under a chosen spec and turn it into a
+   * queue entry, posting an info notice with the sample count and the
+   * mapping source ("auto-detect", "previous", or "confirmed").
+   */
+  const loadWithSpec = useCallback(
+    (
+      fileName: string,
+      text: string,
+      spec: ImportSpec,
+      how: string,
+    ): QueueEntry =>
+      entryFromParse(fileName, () => {
+        const raw = parseWithSpec(text, fileName, spec);
+        addNotice(
+          "info",
+          `Loaded ${fileName} (${raw.timeUs.length} samples) using ${how}.`,
+        );
+        return raw;
+      }),
+    [addNotice, entryFromParse],
+  );
+
+  /**
+   * Commit a freshly built list of queue entries: first becomes current,
+   * the rest stay pending, and the picker is reset for the new file.
+   * Replacing the queue on every load matches the original single-batch
+   * behavior; mixed confirmed/invalid entries keep their statuses.
+   */
+  const finalizeQueue = useCallback(
+    (entries: QueueEntry[]) => {
+      if (entries.length === 0) return;
+      const [first, ...rest] = entries;
+      setQueue([
+        { ...first, status: "current" },
+        ...rest.map((e) => ({ ...e })),
+      ]);
+      setPicker(emptyPickerState());
+      if (entries.length > 1) {
+        addNotice(
+          "info",
+          `Queued ${entries.length} files. Starting with ${first.fileName}.`,
+        );
       }
     },
     [addNotice],
@@ -466,43 +514,161 @@ export default function App() {
   );
 
   /**
-   * Handle user-selected or dropped files. Replaces the current queue
-   * (single file behavior) or appends to it (multi-file behavior). The
-   * first valid file becomes the current entry immediately.
+   * Handle user-selected or dropped files. Known formats (standard CSV
+   * and legacy scope TXT) parse immediately; anything that fails to
+   * auto-detect — or whose generic guess still fails to parse — is a
+   * "candidate" that needs the user's mapping confirmation. When the
+   * first candidate's shape matches the last confirmed mapping, the
+   * whole candidate batch loads silently; otherwise the mapping dialog
+   * opens prefilled from the sniffer.
    */
   const handleFiles = useCallback(
     async (fileList: FileList | File[]) => {
       const files = Array.from(fileList);
       if (files.length === 0) return;
-      // Clear previous file-level errors when starting a new load.
       setErrors([]);
-      // New session: drop any previous-file overlay reference.
       setPrevOverlay(null);
       const entries: QueueEntry[] = [];
+      const candidates: {
+        fileName: string;
+        text: string;
+        detected: DetectedImport | null;
+      }[] = [];
       for (const f of files) {
+        if (!isSupportedFile(f)) {
+          addNotice("error", `Unsupported file: ${f.name}`);
+          continue;
+        }
         // eslint-disable-next-line no-await-in-loop
-        const entry = await parseFileToEntry(f);
-        if (entry) entries.push(entry);
+        const text = await readFileText(f);
+        const detected = guessImportSpec(text);
+        // A generic guess that still fails to parse is treated as
+        // unresolved: the user must confirm a mapping for it.
+        let genericFailed = false;
+        if (detected && detected.kind === "generic") {
+          try {
+            parseWithSpec(text, f.name, detected.spec);
+          } catch {
+            genericFailed = true;
+          }
+        }
+        if (!detected || genericFailed) {
+          candidates.push({ fileName: f.name, text, detected });
+          continue;
+        }
+        const entry = loadWithSpec(
+          f.name,
+          text,
+          detected.spec,
+          `${KIND_LABEL[detected.kind]} mapping`,
+        );
+        entries.push(entry);
       }
-      if (entries.length === 0) return;
-      // First valid entry becomes current; the rest stay pending.
-      // Loading a fresh batch replaces any previous queue.
-      const [first, ...rest] = entries;
-      setQueue([
-        { ...first, status: "current" },
-        ...rest.map((e) => ({ ...e })),
-      ]);
-      // Reset picker for the new file (settings are kept across files).
-      setPicker(emptyPickerState());
-      if (entries.length > 1) {
-        addNotice(
-          "info",
-          `Queued ${entries.length} files. Starting with ${first.fileName}.`,
+
+      if (candidates.length > 0) {
+        const remembered = manualSpec;
+        const first = candidates[0];
+        // Same-shape fast path: when the remembered mapping still fits
+        // the first candidate's rows, reuse it for the whole batch
+        // without interrupting the user.
+        if (
+          remembered &&
+          matchesRememberedSpec(first.text, remembered)
+        ) {
+          for (const c of candidates) {
+            entries.push(
+              loadWithSpec(
+                c.fileName,
+                c.text,
+                remembered,
+                "your previous import mapping",
+              ),
+            );
+          }
+          finalizeQueue(entries);
+        } else {
+          pendingCandidatesRef.current = candidates;
+          queuePrefixRef.current = entries;
+          const prefill =
+            remembered ?? first.detected?.spec ?? STANDARD_CSV_SPEC;
+          setMappingRequest({
+            pending: candidates.map((c) => ({
+              fileName: c.fileName,
+              text: c.text,
+            })),
+            initialSpec: { ...prefill },
+            columns: first.detected?.columns ?? null,
+          });
+        }
+        return;
+      }
+      finalizeQueue(entries);
+    },
+    [addNotice, finalizeQueue, loadWithSpec, manualSpec],
+  );
+
+  /** Open the mapping dialog in edit-only mode (no pending files). */
+  const openMappingEditor = useCallback(() => {
+    setMappingRequest({
+      pending: [],
+      initialSpec: { ...(manualSpec ?? STANDARD_CSV_SPEC) },
+      columns: null,
+    });
+  }, [manualSpec]);
+
+  /**
+   * Dialog confirm: persist the mapping, close, and — when real files
+   * were pending — parse every candidate under it and commit the queue.
+   */
+  const confirmMapping = useCallback(
+    (spec: ImportSpec) => {
+      setManualSpec({ ...spec });
+      setMappingRequest(null);
+      const candidates = pendingCandidatesRef.current;
+      const prefix = queuePrefixRef.current;
+      pendingCandidatesRef.current = [];
+      queuePrefixRef.current = [];
+      // Edit-only mode (no pending files): just remember the mapping.
+      if (candidates.length === 0) {
+        addNotice("info", "Import mapping updated.");
+        return;
+      }
+      const entries = [...prefix];
+      for (const c of candidates) {
+        entries.push(
+          loadWithSpec(
+            c.fileName,
+            c.text,
+            spec,
+            "the confirmed import mapping",
+          ),
         );
       }
+      finalizeQueue(entries);
     },
-    [addNotice, parseFileToEntry],
+    [addNotice, finalizeQueue, loadWithSpec],
   );
+
+  /**
+   * Dialog cancel: drop the unresolved candidates with a warning and
+   * commit any already-parsed entries from the same batch so the user
+   * does not lose the files that did load.
+   */
+  const cancelMapping = useCallback(() => {
+    const candidates = pendingCandidatesRef.current;
+    const prefix = queuePrefixRef.current;
+    pendingCandidatesRef.current = [];
+    queuePrefixRef.current = [];
+    setMappingRequest(null);
+    if (candidates.length > 0) {
+      addNotice(
+        "warning",
+        `Import canceled for ${candidates.length} file(s): ` +
+          candidates.map((c) => c.fileName).join(", "),
+      );
+    }
+    if (prefix.length > 0) finalizeQueue(prefix);
+  }, [addNotice, finalizeQueue]);
 
   // Global drag-and-drop: accept CSV drops anywhere on the page.
   // dragover's preventDefault is required for the drop event to fire,
@@ -677,6 +843,9 @@ export default function App() {
       if (isEditableTarget(e.target)) return;
       // Modifier-key combos are reserved for browser shortcuts.
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // While the mapping dialog is open, picks/zoom stay frozen so
+      // the user's keystrokes only affect the dialog's own controls.
+      if (mappingRequest) return;
 
       if (e.key === "Enter") {
         if (!currentRaw) return;
@@ -776,7 +945,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [currentRaw, picker, recordResult, advanceQueue, addNotice, autoDownloadPng, capturePng, settings]);
+  }, [currentRaw, picker, recordResult, advanceQueue, addNotice, autoDownloadPng, capturePng, settings, mappingRequest]);
 
   // Display label for the current file in the progress header.
   const currentIndex = currentEntry
@@ -797,6 +966,8 @@ export default function App() {
             autoDownloadPng={autoDownloadPng}
             onDownloadCsv={handleDownloadCsv}
             onToggleAutoDownloadPng={handleToggleAutoDownloadPng}
+            importSummary={describeImportSummary(manualSpec)}
+            onEditImportMapping={openMappingEditor}
           />
           <SettingsPanel
             settings={settings}
@@ -853,6 +1024,13 @@ export default function App() {
         <div className="drop-overlay" aria-hidden="true">
           <div className="drop-overlay-inner">Drop data file(s) here</div>
         </div>
+      ) : null}
+      {mappingRequest ? (
+        <ImportMappingDialog
+          request={mappingRequest}
+          onConfirm={confirmMapping}
+          onCancel={cancelMapping}
+        />
       ) : null}
     </div>
   );
@@ -927,6 +1105,32 @@ function isEditableTarget(target: EventTarget | null): boolean {
   if (target.isContentEditable) return true;
   const tag = target.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+/** Sniffer kind → human label shown in load notices. */
+const KIND_LABEL: Record<DetectedImport["kind"], string> = {
+  "standard-csv": "standard CSV",
+  "scope-txt": "legacy scope TXT",
+  generic: "detected",
+};
+
+/**
+ * One-line summary of the current import mapping for the Imports panel.
+ * "Auto-detect" while nothing has been confirmed yet; otherwise the
+ * saved custom mapping is appended so the user knows what unrecognized
+ * files will be parsed with.
+ */
+function describeImportSummary(spec: ImportSpec | null): string {
+  if (!spec) return "Auto-detect";
+  const delim =
+    spec.delimiter === "\t"
+      ? "tab"
+      : spec.delimiter === "whitespace"
+        ? "spaces"
+        : spec.delimiter;
+  return `Auto-detect + custom (${delim}, skip ${spec.skipLines}, ` +
+    `cols ${spec.timeColumn + 1}/${spec.transmitterColumn + 1}/${spec.receiverColumn + 1}, ` +
+    `${spec.timeUnit}/${spec.voltageUnit})`;
 }
 
 /**

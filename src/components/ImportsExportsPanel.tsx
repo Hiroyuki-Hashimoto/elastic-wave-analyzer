@@ -10,6 +10,10 @@ type Props = {
   autoDownloadPng: boolean;
   onDownloadCsv: () => void;
   onToggleAutoDownloadPng: () => void;
+  /** One-line summary of the active import mapping (Auto-detect + ...). */
+  importSummary: string;
+  /** Open the import mapping editor for the saved/custom mapping. */
+  onEditImportMapping: () => void;
 };
 
 /**
@@ -31,6 +35,8 @@ export default function ImportsExportsPanel({
   autoDownloadPng,
   onDownloadCsv,
   onToggleAutoDownloadPng,
+  importSummary,
+  onEditImportMapping,
 }: Props) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -64,6 +70,20 @@ export default function ImportsExportsPanel({
               e.target.value = "";
             }}
           />
+          {/* Mapping summary + editor: shows the active mapping and
+              lets the user pre-configure the custom fallback used for
+              files auto-detection cannot resolve. */}
+          <div className="import-mapping-row">
+            <span className="import-mapping-label">Mapping</span>
+            <span className="import-mapping-text">{importSummary}</span>
+            <button
+              type="button"
+              className="link-button"
+              onClick={onEditImportMapping}
+            >
+              Edit…
+            </button>
+          </div>
         </div>
 
         {/* Exports column: same stack shape, inlined so the two
