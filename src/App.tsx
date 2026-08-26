@@ -21,8 +21,12 @@ import {
   validateLpf,
 } from "./lib/lpf";
 import {
+  guessImportSpec,
+  parseWithSpec,
+  readFileText,
+} from "./lib/importer";
+import {
   buildDisplayWaveform,
-  readCsvFile,
   validateTrim,
 } from "./lib/waveform";
 import {
@@ -103,7 +107,7 @@ export default function App() {
   // When true, Enter-confirm also auto-downloads the current chart as PNG.
   const [autoDownloadPng, setAutoDownloadPng] = useState(false);
   // True while a file drag is in progress over the window; drives the
-  // full-screen "Drop CSV file(s) here" overlay.
+  // full-screen "Drop data file(s) here" overlay.
   const [isDragOver, setIsDragOver] = useState(false);
 
   // The current entry is the single 'current' row in the queue, or null.
@@ -359,23 +363,41 @@ export default function App() {
   ]);
 
   /**
+   * True when a file can be treated as text waveform input. Extension
+   * is the primary signal; text MIME types are accepted as fallback
+   * for tools that export .dat-style names.
+   */
+  const isSupportedFile = (file: File): boolean =>
+    /\.(csv|tsv|txt)$/i.test(file.name) || file.type.startsWith("text/");
+
+  /**
    * Parse one file into a queue entry, recording either a parsed raw
    * waveform or a parse error. The file is NOT added to the queue when
    * it is unsupported (wrong extension / MIME).
    */
   const parseFileToEntry = useCallback(
     async (file: File): Promise<QueueEntry | null> => {
-      if (!/\.csv$/i.test(file.name) && file.type !== "text/csv") {
+      if (!isSupportedFile(file)) {
         addNotice("error", `Unsupported file: ${file.name}`);
         return null;
       }
       queueIdRef.current += 1;
       const id = queueIdRef.current;
       try {
-        const parsed = await readCsvFile(file);
+        // Read fully in-browser, sniff the format, then parse under the
+        // detected mapping (units normalized to µs / V inside).
+        const text = await readFileText(file);
+        const detected = guessImportSpec(text);
+        if (!detected) {
+          throw new Error(
+            "Unrecognized format: no numeric table found in the file.",
+          );
+        }
+        const parsed = parseWithSpec(text, file.name, detected.spec);
         addNotice(
           "info",
-          `Loaded ${file.name} (${parsed.timeUs.length} samples).`,
+          `Loaded ${file.name} (${parsed.timeUs.length} samples) via ` +
+            `${detected.kind} mapping.`,
         );
         return {
           id,
@@ -817,7 +839,7 @@ export default function App() {
               />
             ) : (
               <div className="empty-state">
-                No data loaded. Please select a CSV file.
+                No data loaded. Please select a data file.
               </div>
             )}
           </div>
@@ -829,7 +851,7 @@ export default function App() {
           handling above is unaffected. */}
       {isDragOver ? (
         <div className="drop-overlay" aria-hidden="true">
-          <div className="drop-overlay-inner">Drop CSV file(s) here</div>
+          <div className="drop-overlay-inner">Drop data file(s) here</div>
         </div>
       ) : null}
     </div>

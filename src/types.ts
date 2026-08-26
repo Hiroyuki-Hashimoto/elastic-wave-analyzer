@@ -6,6 +6,45 @@ export type RawWaveform = {
   receiverVRaw: number[];
 };
 
+/** Row delimiters understood by the import mapper. */
+export type ImportDelimiter = "," | ";" | "\t" | "whitespace";
+
+/** Time units accepted on import; values normalize to µs internally. */
+export type ImportTimeUnit = "s" | "ms" | "us" | "ns";
+
+/** Voltage units accepted on import; normalized to volts internally. */
+export type ImportVoltageUnit = "V" | "mV";
+
+/**
+ * Fully resolved import mapping for a batch of files: which cells feed
+ * Time / Transmitter / Receiver, how rows split, how many leading
+ * lines hold metadata, and which units the columns carry.
+ */
+export type ImportSpec = {
+  delimiter: ImportDelimiter;
+  /** Leading lines skipped before data rows begin (absolute offset). */
+  skipLines: number;
+  timeColumn: number;
+  transmitterColumn: number;
+  receiverColumn: number;
+  timeUnit: ImportTimeUnit;
+  voltageUnit: ImportVoltageUnit;
+};
+
+/** Coarse classification reported by the sniffer for notices/UI. */
+export type ImportFormatKind = "standard-csv" | "scope-txt" | "generic";
+
+/**
+ * Sniffing outcome for one file: the proposed spec, the column names
+ * found above the data (null when the file has no usable header), and
+ * which detector produced the guess.
+ */
+export type DetectedImport = {
+  kind: ImportFormatKind;
+  spec: ImportSpec;
+  columns: string[] | null;
+};
+
 /** User-facing display controls; fields map 1:1 to the SettingsPanel inputs. */
 export type DisplaySettings = {
   amplitudeGain: number;

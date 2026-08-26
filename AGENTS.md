@@ -12,8 +12,9 @@
 - Process CSV files entirely in the browser; do not send waveform data to external services.
 - Do not add a backend, database, authentication, routing, global state library, UI component library, or CSS framework unless explicitly requested.
 - Keep React components few and small; place waveform-processing logic in src/lib.
-- Maintain the three-module boundary:
-  - src/lib/waveform.ts: CSV parsing, validation, units, gain, offset, trim
+- Maintain the four-module boundary:
+  - src/lib/importer.ts: input-format detection, column mapping, unit normalization, file reading
+  - src/lib/waveform.ts: raw waveform validation, resampling, gain, offset, trim
   - src/lib/picker.ts: STS/PTP picking and related calculations
   - src/lib/exporter.ts: CSV and PNG export
 

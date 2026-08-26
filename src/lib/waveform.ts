@@ -11,91 +11,39 @@ export const EXPECTED_HEADER = [
   "Receiver [V]",
 ];
 
-export const CSV_PARSE_ERRORS = {
-  header: "Unsupported CSV format. Expected: Time [s], Transmitter [V], Receiver [V].",
-  row: "Each data row must contain three finite numeric values.",
+export const RAW_WAVEFORM_ERRORS = {
   few: "At least two data points are required.",
   monotonic: "The time column must be strictly increasing.",
 } as const;
 
-export type CsvParseError = (typeof CSV_PARSE_ERRORS)[keyof typeof CSV_PARSE_ERRORS];
-
 /**
- * Parse a CSV text into a validated RawWaveform.
- * Throws one of CSV_PARSE_ERRORS on validation failure; callers are
- * expected to catch and surface the message as an English error.
+ * Validate normalized sample arrays (time already in µs, voltages in V)
+ * and wrap them into a RawWaveform. Throws RAW_WAVEFORM_ERRORS on
+ * failure; callers surface the message as an English error.
  */
-export function parseCsv(text: string, fileName: string): RawWaveform {
-  // Split on any line ending (CRLF / CR / LF) for cross-platform input.
-  const lines = text.split(/\r\n|\r|\n/);
-
-  // The header is the first non-empty line; blank leading lines are tolerated.
-  const headerIndex = lines.findIndex((line) => line.trim().length > 0);
-  if (headerIndex === -1) {
-    throw new Error(CSV_PARSE_ERRORS.header);
-  }
-
-  const headerCells = stripTrailingComma(lines[headerIndex].trim())
-    .split(",")
-    .map((cell) => cell.trim());
-
-  // Header must contain at least the three expected columns in order.
-  if (
-    headerCells.length < EXPECTED_HEADER.length ||
-    EXPECTED_HEADER.some((h, i) => headerCells[i] !== h)
-  ) {
-    throw new Error(CSV_PARSE_ERRORS.header);
-  }
-
-  const timeUs: number[] = [];
-  const transmitterVRaw: number[] = [];
-  const receiverVRaw: number[] = [];
-
-  for (let i = headerIndex + 1; i < lines.length; i++) {
-    const raw = lines[i];
-    // Skip blank lines anywhere in the data section.
-    if (raw.trim().length === 0) continue;
-
-    const cells = stripTrailingComma(raw.trim()).split(",").map((c) => c.trim());
-    // Each data row must provide at least three values.
-    if (cells.length < 3) {
-      throw new Error(CSV_PARSE_ERRORS.row);
-    }
-
-    const t = Number(cells[0]);
-    const v1 = Number(cells[1]);
-    const v2 = Number(cells[2]);
-
-    // All three leading values must be finite numbers (no NaN/Infinity).
-    if (!Number.isFinite(t) || !Number.isFinite(v1) || !Number.isFinite(v2)) {
-      throw new Error(CSV_PARSE_ERRORS.row);
-    }
-
-    // Convert Time [s] to microseconds: 1 s = 1_000_000 µs.
-    timeUs.push(t * 1_000_000);
-    // Transmitter / Receiver columns are already in volts; store as-is.
-    transmitterVRaw.push(v1);
-    receiverVRaw.push(v2);
-  }
-
+export function buildValidatedRaw(
+  fileName: string,
+  timeUs: number[],
+  transmitterVRaw: number[],
+  receiverVRaw: number[],
+): RawWaveform {
   // At least two points are required to draw a line.
-  if (timeUs.length < 2) {
-    throw new Error(CSV_PARSE_ERRORS.few);
+  if (
+    timeUs.length < 2 ||
+    transmitterVRaw.length !== timeUs.length ||
+    receiverVRaw.length !== timeUs.length
+  ) {
+    throw new Error(RAW_WAVEFORM_ERRORS.few);
   }
 
   // Time column must be strictly monotonically increasing.
   for (let i = 1; i < timeUs.length; i++) {
     if (!(timeUs[i] > timeUs[i - 1])) {
-      throw new Error(CSV_PARSE_ERRORS.monotonic);
+      throw new Error(RAW_WAVEFORM_ERRORS.monotonic);
     }
   }
 
   return { fileName, timeUs, transmitterVRaw, receiverVRaw };
-}
-
-/** Remove a single trailing comma (tolerated per CSV spec). */
-function stripTrailingComma(s: string): string {
-  return s.endsWith(",") ? s.slice(0, -1) : s;
 }
 
 /**
@@ -223,28 +171,4 @@ export function validateTrim(settings: DisplaySettings): string | null {
     return "Trim start must be earlier than trim end (µs).";
   }
   return null;
-}
-
-/**
- * Read a File into a RawWaveform using FileReader. The file is read
- * entirely in-browser memory; nothing is uploaded or persisted.
- */
-export function readCsvFile(file: File): Promise<RawWaveform> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const result = reader.result;
-        if (typeof result !== "string") {
-          reject(new Error("Failed to read file as text."));
-          return;
-        }
-        resolve(parseCsv(result, file.name));
-      } catch (e) {
-        reject(e instanceof Error ? e : new Error(String(e)));
-      }
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("File read error."));
-    reader.readAsText(file);
-  });
 }

@@ -47,12 +47,12 @@ export default function ImportsExportsPanel({
             className="file-button"
             onClick={() => fileInputRef.current?.click()}
           >
-            Select or drop CSV file(s)
+            Select or drop data file(s)
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
             multiple
             className="file-input-hidden"
             onChange={(e) => {
