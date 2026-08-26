@@ -6,3 +6,8 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 *.tsbuildinfo
+
+# Local sample data: never commit lab measurements or synthetic test
+# inputs to this public repository.
+reference/
+fixtures/
