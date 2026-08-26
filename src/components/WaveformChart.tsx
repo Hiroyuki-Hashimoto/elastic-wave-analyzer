@@ -684,9 +684,9 @@ function buildOptions(
 /**
  * Draw faint dashed vertical guides at the reference run's pick times
  * first (overlay only), then the live STS (red) and PTP (green) marker
- * lines with right-aligned labels. When a reference pick exists for a
- * slot, its label gains a third "(Δ x.x µs)" line reporting how far the
- * live pick sits from the reference one — mirroring the Python
+ * lines with time labels beside them. When a reference pick exists for
+ * a slot, its label gains a third "(Δ x.x µs)" line reporting how far
+ * the live pick sits from the reference one — mirroring the Python
  * analyzer's annotation style.
  */
 function drawMarkers(u: UPlot, markers: ChartMarkers) {
@@ -705,9 +705,6 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
   ctx.lineWidth = 1;
   ctx.font = "11px sans-serif";
   ctx.textBaseline = "top";
-  // Right-align labels so they end one character width left of their
-  // marker line instead of hugging it.
-  ctx.textAlign = "right";
   // Clip to the plot box so markers outside the scrolled window cannot
   // bleed over the axes or gutters.
   ctx.beginPath();
@@ -741,8 +738,34 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
   const LINE_H = 14;
   const gx = -MARKER_LABEL_GAP_PX;
 
-  // STS marker: red vertical line with a right-aligned label stack
-  // pinned near the top of the plot.
+  /**
+   * Draw one pick's label stack beside its vertical marker line. Lines
+   * default to right-aligned ending left of the line, but when the
+   * widest line would spill past the plot's left edge they flip to
+   * left-aligned right of the line so nothing gets clipped.
+   */
+  function drawLabelStack(x: number, topY: number, lines: string[]) {
+    // Widest line decides the clip check; shorter lines fit inside it.
+    let widest = 0;
+    for (const line of lines) {
+      const w = ctx.measureText(line).width;
+      if (w > widest) widest = w;
+    }
+    // Flip only while the marker line itself is on-screen; fully
+    // panned-out picks keep right alignment so the clip hides them.
+    const fitsLeft = x < u.bbox.left || x + gx - widest >= u.bbox.left;
+    ctx.textAlign = fitsLeft ? "right" : "left";
+    // Mirrored gap keeps the same breathing room on either side.
+    const lx = fitsLeft ? x + gx : x + MARKER_LABEL_GAP_PX;
+    let ly = topY;
+    for (const line of lines) {
+      ctx.fillText(line, lx, ly);
+      ly += LINE_H;
+    }
+  }
+
+  // STS marker: red vertical line with its label stack pinned near the
+  // top of the plot.
   if (markers.sts) {
     const x = u.valToPos(markers.sts.timeUs, "time-us", true);
     ctx.strokeStyle = "#d62728";
@@ -751,13 +774,12 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     ctx.lineTo(x, bottom);
     ctx.stroke();
     ctx.fillStyle = "#d62728";
-    let ly = top + 4;
-    ctx.fillText("STS", x + gx, ly); ly += LINE_H;
-    ctx.fillText(`${formatPick(markers.sts)} µs`, x + gx, ly); ly += LINE_H;
+    const lines = ["STS", `${formatPick(markers.sts)} µs`];
     if (markers.prevStsTimeUs != null) {
       const d = markers.sts.timeUs - markers.prevStsTimeUs;
-      ctx.fillText(`(Δ ${fmtDelta(d)} µs)`, x + gx, ly); ly += LINE_H;
+      lines.push(`(Δ ${fmtDelta(d)} µs)`);
     }
+    drawLabelStack(x, top + 4, lines);
   }
   // PTP marker: green vertical line whose label stack is anchored to
   // the plot's bottom edge (6 px inset). A Δ line grows the stack
@@ -770,14 +792,12 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     ctx.lineTo(x, bottom);
     ctx.stroke();
     ctx.fillStyle = "#2ca02c";
-    const lineCount = markers.prevPtpTimeUs != null ? 3 : 2;
-    let ly = bottom - 6 - lineCount * LINE_H;
-    ctx.fillText("PTP", x + gx, ly); ly += LINE_H;
-    ctx.fillText(`${formatPick(markers.ptp)} µs`, x + gx, ly); ly += LINE_H;
+    const lines = ["PTP", `${formatPick(markers.ptp)} µs`];
     if (markers.prevPtpTimeUs != null) {
       const d = markers.ptp.timeUs - markers.prevPtpTimeUs;
-      ctx.fillText(`(Δ ${fmtDelta(d)} µs)`, x + gx, ly); ly += LINE_H;
+      lines.push(`(Δ ${fmtDelta(d)} µs)`);
     }
+    drawLabelStack(x, bottom - 6 - lines.length * LINE_H, lines);
   }
   ctx.restore();
 }
