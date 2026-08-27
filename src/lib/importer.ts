@@ -3,19 +3,19 @@ import type {
   ImportDelimiter,
   ImportSpec,
   ImportTimeUnit,
+  ImportVoltageUnit,
   RawWaveform,
 } from "../types";
 import {
   buildValidatedRaw,
-  EXPECTED_HEADER,
   RAW_WAVEFORM_ERRORS,
 } from "./waveform";
 
 /**
- * Input-format layer: sniff a file's text, propose an ImportSpec (or
- * let the user resolve one in the mapping dialog), then parse rows
- * into a validated RawWaveform. All parsing stays in-browser; nothing
- * is uploaded or persisted.
+ * Input-format layer: sniff a file's text with a single generic table
+ * detector, propose an ImportSpec (which the user confirms or fixes in
+ * the mapping dialog), then parse rows into a validated RawWaveform.
+ * All parsing stays in-browser; nothing is uploaded or persisted.
  */
 
 /** Spec matching the app's original fixed three-column CSV export. */
@@ -44,18 +44,14 @@ export const IMPORT_ERRORS = {
 } as const;
 
 /**
- * Sniff one file's text and propose an import mapping. Returns null
- * when no plausible numeric table can be found at all. Known formats
- * (the app's standard CSV export and the legacy scope memory dump) are
- * recognized exactly; anything else falls through to a generic probe.
+ * Sniff one file's text and propose an import mapping. One generic
+ * detector handles every supported shape — plain delimited tables,
+ * quoted key/value metadata blocks ending in a sentinel line, and
+ * headerless logs — by structure alone, never by format name.
+ * Returns null when no plausible numeric table can be found at all.
  */
 export function guessImportSpec(text: string): DetectedImport | null {
-  const body = stripBom(text);
-  const standard = detectStandardCsv(body);
-  if (standard) return standard;
-  const scope = detectScopeTxt(body);
-  if (scope) return scope;
-  return detectGenericTable(body);
+  return detectTable(stripBom(text));
 }
 
 /**
@@ -134,16 +130,6 @@ export function parseWithSpec(
   }
 }
 
-/** True when the file would parse cleanly under the given spec. */
-export function specFitsText(text: string, spec: ImportSpec): boolean {
-  try {
-    parseWithSpec(text, "probe", spec);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Structural fingerprint check used for the "same format as last time"
  * fast path: the mapped cells must be present and finite on every
@@ -197,78 +183,40 @@ function stripBom(text: string): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
-/** Detect the app's own three-column CSV export by its exact header. */
-function detectStandardCsv(body: string): DetectedImport | null {
-  const lines = body.split(/\r\n|\r|\n/);
-  const first = lines.find((line) => line.trim().length > 0);
-  if (first == null) return null;
-  // Tolerate a trailing comma after the last column name.
-  const cells = splitCells(first, ",");
-  if (cells[cells.length - 1] === "") cells.pop();
-  if (
-    cells.length < EXPECTED_HEADER.length ||
-    EXPECTED_HEADER.some((h, i) => cells[i] !== h)
-  ) {
-    return null;
-  }
-  return { kind: "standard-csv", spec: { ...STANDARD_CSV_SPEC }, columns: cells.slice(0, 3) };
+/** True only for plain decimal/exponent text Number() will accept. */
+function looksNumeric(cell: string | undefined): boolean {
+  if (cell == null || cell.trim().length === 0) return false;
+  return Number.isFinite(Number(cell));
 }
 
-/**
- * Detect the legacy scope memory dump ("...MEM DATA"): quoted key/value
- * metadata lines ending in a `"DATA"` sentinel followed by raw numbers.
- * SIGNAL supplies the column names; HORZ_UNITS carries the time unit.
- */
-function detectScopeTxt(body: string): DetectedImport | null {
-  const lines = body.split(/\r\n|\r|\n/);
-  const dataIdx = lines.findIndex((l) => l.trim() === '"DATA"');
-  // Sentinel missing: definitely not this format.
-  if (dataIdx === -1) return null;
-  // Only trust the branch when metadata lines precede the sentinel.
-  const head = lines.slice(0, dataIdx).filter((l) => l.trim().length > 0);
-  if (head.length === 0) return null;
+type ColumnRoles = {
+  timeColumn: number;
+  transmitterColumn: number;
+  receiverColumn: number;
+};
 
-  const signalLine = head.find((l) => l.trim().startsWith('"SIGNAL"'));
-  const columns = signalLine
-    ? [...signalLine.matchAll(/"([^"]*)"/g)].slice(1).map((m) => m[1])
-    : null;
-
-  const horzLine = head.find((l) => l.trim().startsWith('"HORZ_UNITS"'));
-  let timeUnit: ImportTimeUnit = "s";
-  if (horzLine) {
-    const values = [...horzLine.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
-    const unit = values[1]?.toLowerCase();
-    if (unit === "ms") timeUnit = "ms";
-    else if (unit === "us" || unit === "µs") timeUnit = "us";
-    else if (unit === "ns") timeUnit = "ns";
-  }
-
-  return {
-    kind: "scope-txt",
-    spec: {
-      delimiter: ",",
-      // Data starts right below the sentinel line.
-      skipLines: dataIdx + 1,
-      timeColumn: 0,
-      transmitterColumn: 1,
-      receiverColumn: 2,
-      timeUnit,
-      voltageUnit: "V",
-    },
-    columns,
-  };
-}
+/** Positional roles used when header names are missing or unusable. */
+const POSITIONAL_ROLES: ColumnRoles = {
+  timeColumn: 0,
+  transmitterColumn: 1,
+  receiverColumn: 2,
+};
 
 /**
- * Generic fallback for unknown delimited tables: pick the delimiter
- * with the best median cell count over a sample, locate the first
- * numeric data row, treat everything before it as header/metadata, and
- * infer the Time/Transmitter/Receiver roles plus units from the header
- * names when available.
+ * Generic table detector. Pipeline:
+ *  1. vote on a delimiter by median cell count over a line sample;
+ *  2. find the first line with the winning width whose first three
+ *     cells are numbers — that is where the data block starts;
+ *  3. take the nearest line above the data with a full row of cells
+ *     as the header (shorter non-blank lines above are key/value
+ *     metadata pairs or sentinel lines, never column names);
+ *  4. infer Time/Transmitter/Receiver roles and units from the header
+ *     names, backed by unit tokens found in the metadata lines.
  */
-function detectGenericTable(body: string): DetectedImport | null {
+function detectTable(body: string): DetectedImport | null {
   const lines = body.split(/\r\n|\r|\n/);
-  // Sample enough lines for a stable median without scanning huge files.
+  // Sample enough non-blank lines for a stable median without
+  // scanning huge files end to end.
   const sample: string[] = [];
   for (const line of lines) {
     if (line.trim().length === 0) continue;
@@ -295,81 +243,142 @@ function detectGenericTable(body: string): DetectedImport | null {
   // Fewer than three cells even under the winner: not a usable table.
   if (bestMedian < 3) return null;
 
-  // First line whose cell count matches the mode AND whose probed
-  // triple parses as numbers marks the start of real data.
+  // First line matching the winning width whose first three cells are
+  // numbers marks the data block; everything above it is metadata.
   const dataIdx = lines.findIndex((line) => {
     if (line.trim().length === 0) return false;
     const cells = splitCells(line, bestDelim);
     if (cells.length < bestMedian) return false;
-    return looksNumeric(cells[0]) && looksNumeric(cells[1]) && looksNumeric(cells[2]);
+    return (
+      looksNumeric(cells[0]) &&
+      looksNumeric(cells[1]) &&
+      looksNumeric(cells[2])
+    );
   });
   if (dataIdx === -1) return null;
 
-  // Header = nearest non-blank line above the data block, if any.
+  // Header = nearest line above the data with at least a full row of
+  // cells; shorter lines (quoted key/value pairs, "DATA" sentinels)
+  // are skipped as metadata.
   let headerIdx = -1;
   for (let i = dataIdx - 1; i >= 0; i--) {
-    if (lines[i].trim().length > 0) {
+    if (lines[i].trim().length === 0) continue;
+    if (splitCells(lines[i], bestDelim).length >= bestMedian) {
       headerIdx = i;
       break;
     }
   }
-  const columns =
-    headerIdx >= 0 ? splitCells(lines[headerIdx], bestDelim) : null;
-  // Whitespace padding fragments header names ("Transmitter [V]" splits
-  // apart), so name-based role inference is only trustworthy for real
-  // delimiters; whitespace tables fall back to positional columns.
+
+  // Normalize header names: unwrap quotes, drop the empty cell that a
+  // trailing delimiter produces.
+  let columns: string[] | null = null;
+  if (headerIdx >= 0) {
+    const cells = splitCells(lines[headerIdx], bestDelim).map(stripQuotes);
+    while (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+    // Quoted key/value header lines ("SIGNAL","TIME","CH1",...) lead
+    // with the key itself, so exactly one extra cell drops the key.
+    if (cells.length === bestMedian + 1) cells.shift();
+    if (cells.length >= 3) columns = cells;
+  }
+
+  // Whitespace padding fragments header names ("Transmitter [V]"
+  // splits apart), so name-based role inference is only trustworthy
+  // for real delimiters; whitespace tables use positional columns.
   const roles =
-    bestDelim === "whitespace"
-      ? {
-          timeColumn: 0,
-          transmitterColumn: 1,
-          receiverColumn: 2,
-          timeUnit: "s" as ImportTimeUnit,
-          voltageUnit: "V" as const,
-        }
-      : inferRoles(columns);
+    bestDelim === "whitespace" ? { ...POSITIONAL_ROLES } : inferRoles(columns);
+  const units = detectUnits(
+    lines,
+    headerIdx >= 0 ? headerIdx : dataIdx,
+    columns,
+    bestDelim,
+    roles,
+  );
 
   return {
-    kind: "generic",
     spec: {
       delimiter: bestDelim,
       // Absolute offset: slice() from here keeps blank-line tolerance.
       skipLines: dataIdx,
       ...roles,
+      ...units,
     },
     columns,
   };
 }
 
-/** True only for plain decimal/exponent text Number() will accept. */
-function looksNumeric(cell: string | undefined): boolean {
-  if (cell == null || cell.trim().length === 0) return false;
-  return Number.isFinite(Number(cell));
+/**
+ * Infer the time and voltage units. Units embedded in the matched
+ * header names win ("Time [ms]", "Receiver [mV]"); otherwise metadata
+ * lines above the header that mention units and carry a standalone
+ * token cell (e.g. a quoted "HORZ_UNITS","ms" pair) are consulted,
+ * nearest to the header first. Defaults are s and V.
+ */
+function detectUnits(
+  lines: string[],
+  metaEnd: number,
+  columns: string[] | null,
+  delimiter: ImportDelimiter,
+  roles: ColumnRoles,
+): { timeUnit: ImportTimeUnit; voltageUnit: ImportVoltageUnit } {
+  let timeUnit = columns
+    ? readTimeUnit(columns[roles.timeColumn] ?? "")
+    : null;
+  let voltageUnit: ImportVoltageUnit | null = null;
+  if (columns) {
+    // Receiver's unit label decides; transmitter is the fallback.
+    const vName =
+      columns[roles.receiverColumn] ?? columns[roles.transmitterColumn] ?? "";
+    if (/mv/i.test(vName)) voltageUnit = "mV";
+  }
+  // Scan metadata nearest to the header first; the loop stops once
+  // both unit slots are filled.
+  for (
+    let i = metaEnd - 1;
+    i >= 0 && (timeUnit === null || voltageUnit === null);
+    i--
+  ) {
+    if (lines[i].trim().length === 0) continue;
+    const cells = splitCells(lines[i], delimiter).map(stripQuotes);
+    // Only lines naming units / an axis / a scale carry unit tokens.
+    if (!cells.some((c) => /unit|axis|scale/i.test(c))) continue;
+    if (timeUnit === null) {
+      for (const c of cells) {
+        const token = timeTokenToUnit(c);
+        if (token !== null) {
+          timeUnit = token;
+          break;
+        }
+      }
+    }
+    if (voltageUnit === null) {
+      // A plain V cell means volts; mV applies only when no V exists.
+      if (cells.some((c) => c.trim().toLowerCase() === "v")) {
+        voltageUnit = "V";
+      } else if (cells.some((c) => c.trim().toLowerCase() === "mv")) {
+        voltageUnit = "mV";
+      }
+    }
+  }
+  return { timeUnit: timeUnit ?? "s", voltageUnit: voltageUnit ?? "V" };
 }
 
-type ColumnRoles = {
-  timeColumn: number;
-  transmitterColumn: number;
-  receiverColumn: number;
-  timeUnit: ImportTimeUnit;
-  voltageUnit: "V" | "mV";
-};
+/** Map a standalone cell token (s, ms, us, µs, ns) to a time unit. */
+function timeTokenToUnit(cell: string): ImportTimeUnit | null {
+  const t = cell.trim().toLowerCase();
+  if (t === "s" || t === "sec" || t === "seconds") return "s";
+  if (t === "ms") return "ms";
+  if (t === "us" || t === "µs") return "us";
+  if (t === "ns") return "ns";
+  return null;
+}
 
 /**
  * Map detected header names onto the three required roles using
  * conservative keyword patterns; fall back to positions 0/1/2 when no
- * header exists or nothing matches. Units are read from the matched
- * time/voltage names ([ms], [mV], ...) and default to s / V.
+ * header exists or nothing matches.
  */
 function inferRoles(columns: string[] | null): ColumnRoles {
-  const fallback = {
-    timeColumn: 0,
-    transmitterColumn: 1,
-    receiverColumn: 2,
-    timeUnit: "s" as ImportTimeUnit,
-    voltageUnit: "V" as const,
-  };
-  if (!columns || columns.length < 3) return fallback;
+  if (!columns || columns.length < 3) return { ...POSITIONAL_ROLES };
 
   const findCol = (patterns: RegExp[]): number => {
     for (const p of patterns) {
@@ -379,32 +388,38 @@ function inferRoles(columns: string[] | null): ColumnRoles {
     return -1;
   };
 
-  // Order matters: specific channel names before generic unit suffixes.
-  const tIdx = findCol([/\btime\b/i, /\bsec\b/i, /\bt\b\s*\(|\bs\]|ms\]|µs\]|us\]/i]);
-  const txIdx = findCol([/trans/i, /\binput\b/i, /ch1/i, /trig/i]);
-  const rxIdx = findCol([/rec/i, /\boutput\b/i, /ch2/i, /pzd/i]);
-
-  const timeUnit = readTimeUnit(columns[tIdx >= 0 ? tIdx : 0]);
-  const vName =
-    columns[rxIdx >= 0 ? rxIdx : txIdx >= 0 ? txIdx : 2] ?? "";
-  const voltageUnit: "V" | "mV" = /mv/i.test(vName) ? "mV" : "V";
+  // Order matters: specific channel names before generic markers.
+  const tIdx = findCol([
+    /\btime\b/i,
+    /\bsec\b/i,
+    /\bt\b\s*\(|\bs\]|ms\]|µs\]|us\]/i,
+  ]);
+  const txIdx = findCol([/trans/i, /\binput\b/i, /ch1/i, /trig/i, /\btx\b/i]);
+  const rxIdx = findCol([/rec/i, /\boutput\b/i, /ch2/i, /pzd/i, /\brx\b/i]);
 
   // Unmatched roles keep their positional default instead of failing.
   return {
     timeColumn: tIdx >= 0 ? tIdx : 0,
     transmitterColumn: txIdx >= 0 ? txIdx : 1,
     receiverColumn: rxIdx >= 0 ? rxIdx : 2,
-    timeUnit,
-    voltageUnit,
   };
 }
 
-/** Read a time unit from a column name like "Time [ms]"; defaults to s. */
-function readTimeUnit(name: string): ImportTimeUnit {
+/** Read a time unit from a column name like "Time [ms]"; null if none. */
+function readTimeUnit(name: string): ImportTimeUnit | null {
   if (/µs|us\]/i.test(name)) return "us";
   if (/\bns\b/i.test(name)) return "ns";
   if (/\bms\b/i.test(name)) return "ms";
-  return "s";
+  return null;
+}
+
+/** Unwrap one pair of surrounding double quotes ("SIGNAL" → SIGNAL). */
+function stripQuotes(cell: string): string {
+  const t = cell.trim();
+  // Only fully quoted cells unwrap; quotes inside names are kept.
+  return t.length >= 2 && t.startsWith('"') && t.endsWith('"')
+    ? t.slice(1, -1)
+    : t;
 }
 
 /**

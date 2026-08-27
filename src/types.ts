@@ -31,16 +31,12 @@ export type ImportSpec = {
   voltageUnit: ImportVoltageUnit;
 };
 
-/** Coarse classification reported by the sniffer for notices/UI. */
-export type ImportFormatKind = "standard-csv" | "scope-txt" | "generic";
-
 /**
- * Sniffing outcome for one file: the proposed spec, the column names
- * found above the data (null when the file has no usable header), and
- * which detector produced the guess.
+ * Sniffing outcome for one file: the proposed spec and the normalized
+ * column names found above the data block (null when the file has no
+ * usable header). Produced by the single generic table detector.
  */
 export type DetectedImport = {
-  kind: ImportFormatKind;
   spec: ImportSpec;
   columns: string[] | null;
 };

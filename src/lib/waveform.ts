@@ -5,12 +5,6 @@ import type {
 } from "../types";
 import { applyReceiverLpf, estimateSamplingRateHz } from "./lpf";
 
-export const EXPECTED_HEADER = [
-  "Time [s]",
-  "Transmitter [V]",
-  "Receiver [V]",
-];
-
 export const RAW_WAVEFORM_ERRORS = {
   few: "At least two data points are required.",
   monotonic: "The time column must be strictly increasing.",

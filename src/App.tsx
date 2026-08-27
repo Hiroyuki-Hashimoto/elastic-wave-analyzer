@@ -542,17 +542,17 @@ export default function App() {
         // eslint-disable-next-line no-await-in-loop
         const text = await readFileText(f);
         const detected = guessImportSpec(text);
-        // A generic guess that still fails to parse is treated as
-        // unresolved: the user must confirm a mapping for it.
-        let genericFailed = false;
-        if (detected && detected.kind === "generic") {
+        // A guess that still fails to parse is treated as unresolved:
+        // the user must confirm a mapping for it.
+        let guessFailed = false;
+        if (detected) {
           try {
             parseWithSpec(text, f.name, detected.spec);
           } catch {
-            genericFailed = true;
+            guessFailed = true;
           }
         }
-        if (!detected || genericFailed) {
+        if (!detected || guessFailed) {
           candidates.push({ fileName: f.name, text, detected });
           continue;
         }
@@ -560,7 +560,7 @@ export default function App() {
           f.name,
           text,
           detected.spec,
-          `${KIND_LABEL[detected.kind]} mapping`,
+          "auto-detected mapping",
         );
         entries.push(entry);
       }
@@ -1106,13 +1106,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
   const tag = target.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
-
-/** Sniffer kind → human label shown in load notices. */
-const KIND_LABEL: Record<DetectedImport["kind"], string> = {
-  "standard-csv": "standard CSV",
-  "scope-txt": "legacy scope TXT",
-  generic: "detected",
-};
 
 /**
  * One-line summary of the current import mapping for the Imports panel.
