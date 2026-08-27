@@ -70,9 +70,10 @@ export default function ImportsExportsPanel({
               e.target.value = "";
             }}
           />
-          {/* Mapping summary + editor: shows the active mapping and
-              lets the user pre-configure the custom fallback used for
-              files auto-detection cannot resolve. */}
+          {/* Mapping summary + editor: shows the confirmed mapping and
+              opens the mapping dialog at any time so a wrong choice can
+              be fixed — edits apply to future loads (re-drop to reload
+              already processed files). */}
           <div className="import-mapping-row">
             <span className="import-mapping-label">Mapping</span>
             <span className="import-mapping-text">{importSummary}</span>
@@ -81,7 +82,7 @@ export default function ImportsExportsPanel({
               className="link-button"
               onClick={onEditImportMapping}
             >
-              Edit…
+              Import mapping…
             </button>
           </div>
         </div>
