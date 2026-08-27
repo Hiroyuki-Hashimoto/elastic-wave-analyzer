@@ -1,6 +1,7 @@
 import type {
   DetectedImport,
   ImportDelimiter,
+  ImportMappingMemo,
   ImportSpec,
   ImportTimeUnit,
   ImportVoltageUnit,
@@ -165,6 +166,40 @@ export function matchesRememberedSpec(
     }
   }
   return checked > 0;
+}
+
+/**
+ * True when two resolved mappings agree on every field. Used to decide
+ * whether the saved mapping still differs from the proposal being
+ * edited in the dialog.
+ */
+export function specsEqual(a: ImportSpec, b: ImportSpec): boolean {
+  return (
+    a.delimiter === b.delimiter &&
+    a.skipLines === b.skipLines &&
+    a.timeColumn === b.timeColumn &&
+    a.transmitterColumn === b.transmitterColumn &&
+    a.receiverColumn === b.receiverColumn &&
+    a.timeUnit === b.timeUnit &&
+    a.voltageUnit === b.voltageUnit
+  );
+}
+
+/**
+ * True when a detected import carries exactly the header constitution
+ * the memo was confirmed for: the same delimiter and the same
+ * normalized header cell names, in the same order. Such files load
+ * silently under the confirmed spec; everything else asks the user.
+ */
+export function matchesMemoHeader(
+  detected: DetectedImport,
+  memo: ImportMappingMemo,
+): boolean {
+  if (detected.columns == null || memo.headerCells == null) return false;
+  if (detected.spec.delimiter !== memo.spec.delimiter) return false;
+  const a = detected.columns;
+  const b = memo.headerCells;
+  return a.length === b.length && a.every((c, i) => c === b[i]);
 }
 
 /** Split one physical line into trimmed cells using the given delimiter. */

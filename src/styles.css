@@ -797,7 +797,8 @@ body,
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
-  width: 540px;
+  /* Wide enough for the raw file preview beside the mapping grid. */
+  width: 760px;
   max-width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -813,6 +814,41 @@ body,
   margin: 0;
   font-size: 15px;
   font-weight: 600;
+}
+
+/* Detection verdict, group progress, and the saved-mapping prefill
+   action share one row above the subtitle. */
+.mapping-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--panel);
+  white-space: nowrap;
+}
+
+/* Green verdict for a successful sniff, red for a failed one. */
+.chip-ok {
+  color: #2e7d32;
+  border-color: #2e7d32;
+  background: rgba(46, 125, 50, 0.06);
+}
+
+.chip-fail {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(176, 0, 32, 0.05);
 }
 
 .mapping-subtitle {
@@ -886,6 +922,121 @@ body,
   color: var(--danger);
   /* Keep error text from overflowing on long row references. */
   word-break: break-word;
+}
+
+/* --- Raw file preview inside the mapping dialog --- */
+.file-preview {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-preview-head {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 6px 10px 0;
+  /* Long file names wrap instead of stretching the dialog. */
+  word-break: break-all;
+}
+
+.preview-lines {
+  /* Fixed height keeps the dialog stable regardless of line counts. */
+  max-height: 220px;
+  overflow: auto;
+  padding: 2px 10px 6px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.preview-line {
+  display: flex;
+  gap: 10px;
+  /* Cells stay on one line; wide rows scroll horizontally. */
+  white-space: pre;
+}
+
+.preview-lineno {
+  flex-shrink: 0;
+  min-width: 3ch;
+  text-align: right;
+  color: var(--muted);
+  user-select: none;
+}
+
+/* Metadata lines the parser skips render dimmed in full. */
+.line-skipped .preview-text {
+  color: var(--muted);
+}
+
+/* Cell colors: one hue per mapped role, dim for unmapped cells. */
+.cell-time {
+  color: #1565c0;
+  font-weight: 600;
+}
+
+.cell-tx {
+  color: #b26a00;
+  font-weight: 600;
+}
+
+.cell-rx {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.cell-dim {
+  color: var(--muted);
+}
+
+/* Data row lacking the mapped columns: the parse fails on it. */
+.line-short {
+  background: rgba(176, 0, 32, 0.08);
+}
+
+.preview-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0 10px 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.dot-skip {
+  background: var(--muted);
+}
+
+.dot-time {
+  background: #1565c0;
+}
+
+.dot-tx {
+  background: #b26a00;
+}
+
+.dot-rx {
+  background: #2e7d32;
+}
+
+.dot-dim {
+  background: var(--border);
 }
 
 .mapping-actions {

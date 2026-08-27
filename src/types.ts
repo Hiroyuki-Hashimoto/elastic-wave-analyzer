@@ -41,6 +41,19 @@ export type DetectedImport = {
   columns: string[] | null;
 };
 
+/**
+ * Last user-confirmed import mapping plus the header constitution it
+ * was confirmed against. Files whose detected header matches
+ * headerCells load silently under spec. headerCells is null when the
+ * mapping was confirmed for a headerless or unrecognized file; those
+ * match structurally instead (see matchesRememberedSpec in importer).
+ */
+export type ImportMappingMemo = {
+  spec: ImportSpec;
+  /** Normalized header cell names the spec was confirmed against. */
+  headerCells: string[] | null;
+};
+
 /** User-facing display controls; fields map 1:1 to the SettingsPanel inputs. */
 export type DisplaySettings = {
   amplitudeGain: number;
