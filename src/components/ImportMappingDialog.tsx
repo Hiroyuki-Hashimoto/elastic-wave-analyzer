@@ -236,41 +236,41 @@ export default function ImportMappingDialog({
             </select>
           </label>
 
-          <div className="field">
-            <span className="field-label">Voltage unit (Tx / Rx)</span>
-            {/* Two selects share one grid cell: transmitter on the
-                left, receiver in the leftover right-hand space. */}
-            <div className="voltage-unit-pair">
-              <select
-                className="mapping-select"
-                aria-label="Transmitter voltage unit"
-                value={spec.transmitterVoltageUnit}
-                onChange={(e) =>
-                  patch({
-                    transmitterVoltageUnit:
-                      e.target.value as ImportSpec["transmitterVoltageUnit"],
-                  })
-                }
-              >
-                <option value="V">V</option>
-                <option value="mV">mV</option>
-              </select>
-              <select
-                className="mapping-select"
-                aria-label="Receiver voltage unit"
-                value={spec.receiverVoltageUnit}
-                onChange={(e) =>
-                  patch({
-                    receiverVoltageUnit:
-                      e.target.value as ImportSpec["receiverVoltageUnit"],
-                  })
-                }
-              >
-                <option value="V">V</option>
-                <option value="mV">mV</option>
-              </select>
-            </div>
-          </div>
+          <label className="field">
+            <span className="field-label">
+              Voltage unit for transmitter
+            </span>
+            <select
+              className="mapping-select"
+              value={spec.transmitterVoltageUnit}
+              onChange={(e) =>
+                patch({
+                  transmitterVoltageUnit:
+                    e.target.value as ImportSpec["transmitterVoltageUnit"],
+                })
+              }
+            >
+              <option value="V">Volts (V)</option>
+              <option value="mV">Millivolts (mV)</option>
+            </select>
+          </label>
+
+          <label className="field">
+            <span className="field-label">Voltage unit for receiver</span>
+            <select
+              className="mapping-select"
+              value={spec.receiverVoltageUnit}
+              onChange={(e) =>
+                patch({
+                  receiverVoltageUnit:
+                    e.target.value as ImportSpec["receiverVoltageUnit"],
+                })
+              }
+            >
+              <option value="V">Volts (V)</option>
+              <option value="mV">Millivolts (mV)</option>
+            </select>
+          </label>
         </div>
 
         {/* Raw file head: the evidence the interpretation is checked

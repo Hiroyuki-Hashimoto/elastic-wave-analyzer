@@ -1245,7 +1245,8 @@ function describeImportSummary(memo: ImportMappingMemo | null): string {
   return `Confirmed (${delim}, skip ${spec.skipLines}, ` +
     `cols ${spec.timeColumn + 1}/${spec.transmitterColumn + 1}/` +
     `${spec.receiverColumn + 1}, ${spec.timeUnit}, ` +
-    `Tx ${spec.transmitterVoltageUnit}/Rx ${spec.receiverVoltageUnit}) ` +
+    `transmitter ${spec.transmitterVoltageUnit} / ` +
+    `receiver ${spec.receiverVoltageUnit}) ` +
     `— same header loads directly`;
 }
 
