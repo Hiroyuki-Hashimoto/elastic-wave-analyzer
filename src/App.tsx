@@ -1244,7 +1244,8 @@ function describeImportSummary(memo: ImportMappingMemo | null): string {
         : spec.delimiter;
   return `Confirmed (${delim}, skip ${spec.skipLines}, ` +
     `cols ${spec.timeColumn + 1}/${spec.transmitterColumn + 1}/` +
-    `${spec.receiverColumn + 1}, ${spec.timeUnit}/${spec.voltageUnit}) ` +
+    `${spec.receiverColumn + 1}, ${spec.timeUnit}, ` +
+    `Tx ${spec.transmitterVoltageUnit}/Rx ${spec.receiverVoltageUnit}) ` +
     `— same header loads directly`;
 }
 
@@ -1364,12 +1365,17 @@ function loadStoredMappingMemo(): ImportMappingMemo | null {
       return null;
     }
     const s = spec as Record<string, unknown>;
-    if (Object.keys(s).length !== 7) return null;
+    if (Object.keys(s).length !== 8) return null;
     if (![",", ";", "\t", "whitespace"].includes(s.delimiter as string)) {
       return null;
     }
     if (!["s", "ms", "us", "ns"].includes(s.timeUnit as string)) return null;
-    if (!["V", "mV"].includes(s.voltageUnit as string)) return null;
+    if (!["V", "mV"].includes(s.transmitterVoltageUnit as string)) {
+      return null;
+    }
+    if (!["V", "mV"].includes(s.receiverVoltageUnit as string)) {
+      return null;
+    }
     // Numeric fields must be non-negative integers (skipLines included).
     for (const key of [
       "skipLines",

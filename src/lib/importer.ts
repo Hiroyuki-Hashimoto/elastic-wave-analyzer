@@ -27,7 +27,8 @@ export const STANDARD_CSV_SPEC: ImportSpec = {
   transmitterColumn: 1,
   receiverColumn: 2,
   timeUnit: "s",
-  voltageUnit: "V",
+  transmitterVoltageUnit: "V",
+  receiverVoltageUnit: "V",
 };
 
 /** Multipliers converting each supported time unit into microseconds. */
@@ -69,8 +70,9 @@ export function parseWithSpec(
   const body = stripBom(text);
   const lines = body.split(/\r\n|\r|\n/);
   const tFactor = TIME_UNIT_TO_US[spec.timeUnit] ?? 1;
-  // mV columns scale down into volts; V columns pass through untouched.
-  const vScale = spec.voltageUnit === "mV" ? 0.001 : 1;
+  // mV channels scale down into volts; V channels pass through.
+  const txScale = spec.transmitterVoltageUnit === "mV" ? 0.001 : 1;
+  const rxScale = spec.receiverVoltageUnit === "mV" ? 0.001 : 1;
   const maxCol = Math.max(
     spec.timeColumn,
     spec.transmitterColumn,
@@ -116,8 +118,8 @@ export function parseWithSpec(
     }
 
     timeUs.push(t * tFactor);
-    transmitterV.push(tv * vScale);
-    receiverV.push(rv * vScale);
+    transmitterV.push(tv * txScale);
+    receiverV.push(rv * rxScale);
   }
 
   if (timeUs.length === 0) {
@@ -181,7 +183,8 @@ export function specsEqual(a: ImportSpec, b: ImportSpec): boolean {
     a.transmitterColumn === b.transmitterColumn &&
     a.receiverColumn === b.receiverColumn &&
     a.timeUnit === b.timeUnit &&
-    a.voltageUnit === b.voltageUnit
+    a.transmitterVoltageUnit === b.transmitterVoltageUnit &&
+    a.receiverVoltageUnit === b.receiverVoltageUnit
   );
 }
 
@@ -342,11 +345,13 @@ function detectTable(body: string): DetectedImport | null {
 }
 
 /**
- * Infer the time and voltage units. Units embedded in the matched
- * header names win ("Time [ms]", "Receiver [mV]"); otherwise metadata
- * lines above the header that mention units and carry a standalone
- * token cell (e.g. a quoted "HORZ_UNITS","ms" pair) are consulted,
- * nearest to the header first. Defaults are s and V.
+ * Infer the time and per-channel voltage units. Units embedded in each
+ * channel's own header name win ("Transmitter [mV]", "Receiver [V]");
+ * otherwise metadata lines above the header that mention units and
+ * carry standalone token cells are consulted, nearest to the header
+ * first. A multi-token line maps positionally onto
+ * time/transmitter/receiver (e.g. "VERT_UNITS","s","V","mV"); a single
+ * voltage token fills both channels. Defaults are s and V.
  */
 function detectUnits(
   lines: string[],
@@ -354,22 +359,25 @@ function detectUnits(
   columns: string[] | null,
   delimiter: ImportDelimiter,
   roles: ColumnRoles,
-): { timeUnit: ImportTimeUnit; voltageUnit: ImportVoltageUnit } {
+): {
+  timeUnit: ImportTimeUnit;
+  transmitterVoltageUnit: ImportVoltageUnit;
+  receiverVoltageUnit: ImportVoltageUnit;
+} {
   let timeUnit = columns
     ? readTimeUnit(columns[roles.timeColumn] ?? "")
     : null;
-  let voltageUnit: ImportVoltageUnit | null = null;
-  if (columns) {
-    // Receiver's unit label decides; transmitter is the fallback.
-    const vName =
-      columns[roles.receiverColumn] ?? columns[roles.transmitterColumn] ?? "";
-    if (/mv/i.test(vName)) voltageUnit = "mV";
-  }
+  let txUnit: ImportVoltageUnit | null = columns
+    ? readVoltageUnit(columns[roles.transmitterColumn] ?? "")
+    : null;
+  let rxUnit: ImportVoltageUnit | null = columns
+    ? readVoltageUnit(columns[roles.receiverColumn] ?? "")
+    : null;
   // Scan metadata nearest to the header first; the loop stops once
-  // both unit slots are filled.
+  // every unit slot is filled.
   for (
     let i = metaEnd - 1;
-    i >= 0 && (timeUnit === null || voltageUnit === null);
+    i >= 0 && (timeUnit === null || txUnit === null || rxUnit === null);
     i--
   ) {
     if (lines[i].trim().length === 0) continue;
@@ -385,16 +393,20 @@ function detectUnits(
         }
       }
     }
-    if (voltageUnit === null) {
-      // A plain V cell means volts; mV applies only when no V exists.
-      if (cells.some((c) => c.trim().toLowerCase() === "v")) {
-        voltageUnit = "V";
-      } else if (cells.some((c) => c.trim().toLowerCase() === "mv")) {
-        voltageUnit = "mV";
-      }
-    }
+    // Standalone V/mV tokens in order: first feeds the transmitter,
+    // second the receiver; a single token fills both unfilled slots.
+    const vTokens = cells
+      .map((c) => voltageTokenToUnit(c))
+      .filter((u): u is ImportVoltageUnit => u !== null);
+    if (txUnit === null && vTokens.length >= 1) txUnit = vTokens[0];
+    if (rxUnit === null && vTokens.length >= 2) rxUnit = vTokens[1];
+    else if (rxUnit === null && vTokens.length === 1) rxUnit = vTokens[0];
   }
-  return { timeUnit: timeUnit ?? "s", voltageUnit: voltageUnit ?? "V" };
+  return {
+    timeUnit: timeUnit ?? "s",
+    transmitterVoltageUnit: txUnit ?? "V",
+    receiverVoltageUnit: rxUnit ?? "V",
+  };
 }
 
 /** Map a standalone cell token (s, ms, us, µs, ns) to a time unit. */
@@ -404,6 +416,14 @@ function timeTokenToUnit(cell: string): ImportTimeUnit | null {
   if (t === "ms") return "ms";
   if (t === "us" || t === "µs") return "us";
   if (t === "ns") return "ns";
+  return null;
+}
+
+/** Map a standalone cell token (V, mV) to a voltage unit. */
+function voltageTokenToUnit(cell: string): ImportVoltageUnit | null {
+  const t = cell.trim().toLowerCase();
+  if (t === "v") return "V";
+  if (t === "mv") return "mV";
   return null;
 }
 
@@ -445,6 +465,13 @@ function readTimeUnit(name: string): ImportTimeUnit | null {
   if (/µs|us\]/i.test(name)) return "us";
   if (/\bns\b/i.test(name)) return "ns";
   if (/\bms\b/i.test(name)) return "ms";
+  return null;
+}
+
+/** Read a voltage unit from a column name like "CH1 [mV]"; null if none. */
+function readVoltageUnit(name: string): ImportVoltageUnit | null {
+  if (/mv/i.test(name)) return "mV";
+  if (/\bv\b/i.test(name)) return "V";
   return null;
 }
 

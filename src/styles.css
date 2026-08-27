@@ -876,6 +876,20 @@ body,
   color: var(--text);
 }
 
+/* Transmitter + Receiver voltage selects side by side inside one grid
+   cell; each takes half the cell so the pair fills the same space the
+   old single select occupied. */
+.voltage-unit-pair {
+  display: flex;
+  gap: 6px;
+}
+
+.voltage-unit-pair .mapping-select {
+  /* Equal halves regardless of option label widths. */
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .mapping-preview {
   border: 1px solid var(--border);
   border-radius: 6px;

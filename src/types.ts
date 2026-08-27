@@ -18,7 +18,9 @@ export type ImportVoltageUnit = "V" | "mV";
 /**
  * Fully resolved import mapping for a batch of files: which cells feed
  * Time / Transmitter / Receiver, how rows split, how many leading
- * lines hold metadata, and which units the columns carry.
+ * lines hold metadata, and which units the columns carry. Transmitter
+ * and Receiver voltages take separate units because instruments can
+ * export the two channels in different scales.
  */
 export type ImportSpec = {
   delimiter: ImportDelimiter;
@@ -28,7 +30,8 @@ export type ImportSpec = {
   transmitterColumn: number;
   receiverColumn: number;
   timeUnit: ImportTimeUnit;
-  voltageUnit: ImportVoltageUnit;
+  transmitterVoltageUnit: ImportVoltageUnit;
+  receiverVoltageUnit: ImportVoltageUnit;
 };
 
 /**
