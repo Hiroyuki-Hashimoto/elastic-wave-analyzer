@@ -142,6 +142,10 @@ export default function App() {
   // Notifications) collapse so the chart area can use that horizontal
   // space. Flipped by the toggle button next to the app title.
   const [panelsHidden, setPanelsHidden] = useState(false);
+  // When true, the Results table at the bottom of chart-area collapses
+  // so the two plots can absorb its 22% share of the column height.
+  // Flipped by the toggle button in the chart-area header.
+  const [resultsHidden, setResultsHidden] = useState(false);
   // True while a file drag is in progress over the window; drives the
   // full-screen "Drop data file(s) here" overlay.
   const [isDragOver, setIsDragOver] = useState(false);
@@ -1218,12 +1222,33 @@ export default function App() {
         </div>
 
         <section className="chart-area">
-          {/* Progress line above the chart. */}
-          {queue.length > 0 && currentEntry ? (
-            <p className="progress-label">
-              File {currentIndex} of {queue.length}: {currentEntry.fileName}
-            </p>
-          ) : null}
+          {/* Header row: file-name label on the left when a file is
+              loaded, results toggle pinned to the right edge so the
+              two plots can reclaim the table's 22% share when it's
+              hidden. The row always renders so the toggle stays
+              reachable even before the first file loads. */}
+          <div className="chart-area-header">
+            {queue.length > 0 && currentEntry ? (
+              <p className="progress-label">
+                File {currentIndex} of {queue.length}: {currentEntry.fileName}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="toggle-results-button"
+              onClick={() => setResultsHidden((prev) => !prev)}
+              aria-expanded={!resultsHidden}
+              title={
+                resultsHidden
+                  ? "Show the results table"
+                  : "Hide the results table"
+              }
+            >
+              {resultsHidden
+                ? "▲ Show results table"
+                : "▼ Hide results table"}
+            </button>
+          </div>
 
           {/* Charts and Results share one page: the plots absorb the
               leftover height while the results table keeps a fixed
@@ -1264,7 +1289,7 @@ export default function App() {
               </div>
             )}
           </div>
-          <ResultsTable rows={resultRows} />
+          {!resultsHidden && <ResultsTable rows={resultRows} />}
         </section>
       </main>
       {/* Full-window drop hint shown while files hover over the page.

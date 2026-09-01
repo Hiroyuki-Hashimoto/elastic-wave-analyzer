@@ -612,6 +612,52 @@ body,
   color: var(--text);
 }
 
+/* Header row pinned to the top of chart-area: the file-name label
+   (when present) shrinks via flex so the toggle button can keep its
+   right-edge slot. min-width:0 + ellipsis stop a long file name from
+   shoving the button off-screen. */
+.chart-area-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  min-width: 0;
+}
+/* When the label sits inside .chart-area-header the row owns the
+   bottom margin, so the label drops its own. flex 0 1 auto lets it
+   shrink around the toggle while min-width:0 + ellipsis keep a long
+   file name from overflowing past the button. */
+.chart-area-header .progress-label {
+  margin: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Same chrome as .toggle-panels-button so both toggles read as the
+   same kind of layout control. margin-left:auto anchors the button
+   to the right edge of the header row regardless of whether the
+   file-name label is present (so the toggle is reachable even before
+   the first file loads). */
+.toggle-results-button {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.toggle-results-button:hover {
+  filter: brightness(0.97);
+}
+
 /* Picker furniture wrapper: text panel + action row share one band so
    they stay visually aligned, but the panel itself only frames text. */
 .pick-guidance-row {
