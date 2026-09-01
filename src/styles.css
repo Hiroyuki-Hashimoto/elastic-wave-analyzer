@@ -167,6 +167,24 @@ body,
   gap: 10px;
 }
 
+/* Boolean ON state: light blue wash + accent border so the card
+   visually pairs with the armed toggle inside it. Applies to both
+   the 2x2 measurement cards and the feature-stack inline cards. */
+.settings-item-card.is-on,
+.settings-inline-card.is-on {
+  background: #eaf2fb;
+  border-color: var(--accent);
+}
+
+/* Cards without a Boolean toggle wear the same light blue treatment
+   permanently (Trigger gain, Peak search width), so the panel reads
+   as one cohesive all-active state. */
+.settings-item-card.no-toggle,
+.settings-inline-card.no-toggle {
+  background: #eaf2fb;
+  border-color: var(--accent);
+}
+
 .settings-item-name {
   font-size: 12px;
   font-weight: 600;
@@ -638,8 +656,13 @@ body,
 /* Allow-skip toggle: the button itself stays panel-colored so it
    never reads as a second primary action; only the switch track and
    the button border turn accent when armed. Label hugs the left edge,
-   switch hugs the right. */
+   switch hugs the right. position:relative anchors the absolutely
+   positioned .toggle-switch-track / .toggle-switch-thumb descendants
+   so they live inside the button instead of stretching across the
+   whole window (whose inset:0 would otherwise match the initial
+   containing block). */
 .pick-action-button-toggle {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -652,17 +675,31 @@ body,
   border-color: var(--accent);
 }
 
-/* iOS-style toggle pill: track + thumb. The parent button's
-   aria-pressed carries the real on/off state; these spans are purely
-   visual so they are aria-hidden in the markup. */
-.pick-action-button-switch {
+/* iOS-style toggle pill: shared across the Allow-skip button (visual
+   spans nested inside the button) and the Settings panel toggles
+   (where the label wrapper drives the same .is-on state). The
+   .is-on class lives on either parent (button or label) and the
+   track/thumb pick up the ON paint from there. */
+.toggle-switch {
   position: relative;
+  display: inline-block;
   width: 36px;
   height: 20px;
   flex-shrink: 0;
+  cursor: pointer;
 }
-
-.pick-action-button-switch-track {
+.toggle-switch-input {
+  /* Hidden checkbox retains focus/keyboard accessibility; the visible
+     track + thumb get all the styling. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.toggle-switch-track {
   position: absolute;
   inset: 0;
   border-radius: 10px;
@@ -670,8 +707,7 @@ body,
   border: 1px solid var(--border);
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-
-.pick-action-button-switch-thumb {
+.toggle-switch-thumb {
   position: absolute;
   top: 2px;
   left: 2px;
@@ -683,15 +719,16 @@ body,
   transition: transform 0.15s ease;
 }
 
-/* ON state: track fills with accent and thumb slides right by the
-   track's interior width (36 - 2 - 2 - 14 = 18, rounded to 16 to
-   avoid hugging the inner border). */
-.pick-action-button-toggle.is-on .pick-action-button-switch-track {
+/* ON state — same rules apply whether .is-on sits on a button or a
+   label wrapper. The thumb slides 16px (track interior ~18px, rounded
+   to 16 so the thumb never hugs the inner border). */
+.pick-action-button-toggle.is-on .toggle-switch-track,
+.toggle-switch.is-on .toggle-switch-track {
   background: var(--accent);
   border-color: var(--accent);
 }
-
-.pick-action-button-toggle.is-on .pick-action-button-switch-thumb {
+.pick-action-button-toggle.is-on .toggle-switch-thumb,
+.toggle-switch.is-on .toggle-switch-thumb {
   transform: translateX(16px);
 }
 
@@ -717,8 +754,12 @@ body,
   border-left: 1px solid var(--border);
 }
 /* Allow-skip inside the group keeps the toggle's flex layout; the
-   switch sits to the right of the label just like in standalone use. */
+   switch sits to the right of the label just like in standalone use.
+   position:relative is repeated here so the .pick-action-skip-group
+   ancestor (higher specificity) still anchors the toggle's absolutely
+   positioned switch visuals. */
 .pick-action-skip-group .pick-action-button-toggle {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;

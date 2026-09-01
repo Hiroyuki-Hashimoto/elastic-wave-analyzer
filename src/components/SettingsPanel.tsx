@@ -1,4 +1,5 @@
 import type { DisplaySettings } from "../types";
+import ToggleSwitch from "./ToggleSwitch";
 
 type Props = {
   settings: DisplaySettings;
@@ -7,17 +8,16 @@ type Props = {
 
 /**
  * Settings panel holds only the per-measurement controls:
- *   1. Four bordered cards in a 2x2 grid: Subtract initial voltage,
- *      Overlay previous waveform, Trigger gain and Peak search width,
- *      with numeric inputs placed inline beside their label and the
- *      unit shown to the right of the input.
+ *   1. Four bordered cards in a 2x2 grid: the two numeric-only cards
+ *      (Trigger gain, Peak search width) sit on row 1 so the always-
+ *      active framing reads first; the two Boolean-toggle cards
+ *      (Subtract initial voltage, Overlay previous waveform) follow
+ *      on row 2.
  *   2. One-line feature cards (Time trimming, Wave velocity, Trigger
- *      auto-detection, Cross-correlation): heading, Enable checkbox
- *      and unit-suffixed inputs share a single bordered row each.
- *   3. LPF for receiver: same one-line card shape at the bottom of the
- *      panel; enables a zero-phase Butterworth low-pass on the Receiver
- *      trace. Room remains below for future HPF controls. The file
- *      picker, results CSV download, and PNG auto-save toggle live in
+ *      auto-detection, Cross-correlation, LPF): heading, iOS-style
+ *      toggle and unit-suffixed inputs share a single bordered row.
+ *      Room remains below for future HPF controls. The file picker,
+ *      results CSV download, and PNG auto-save toggle live in
  *      ImportsExportsPanel.
  */
 export default function SettingsPanel({ settings, onSettingsChange }: Props) {
@@ -29,52 +29,13 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
     <aside className="settings-panel">
       <h2 className="settings-title">Settings</h2>
 
-      {/* Measurement controls as four bordered cards in a 2x2 grid;
-          numeric inputs sit inline beside the label with the unit at
-          the right edge of the input, toggles show a bold name left
-          and an Enable checkbox right. */}
+      {/* Measurement controls as four bordered cards in a 2x2 grid.
+          Row 1 holds the numeric-only cards (no toggle, always blue);
+          row 2 holds the Boolean-toggle cards (blue only when armed). */}
       <section className="settings-measurement-grid">
-        {/* Offset correction: two-line name keeps the card compact. */}
+        {/* Trigger gain: numeric-only, no Boolean. */}
         <div
-          className="settings-item-card settings-item-toggle grid-c1-r1"
-          title="Subtract the pre-trigger baseline from every sample (offset correction)."
-        >
-          <span className="settings-item-name">
-            Subtract initial voltage
-            <br />
-            (offset correction)
-          </span>
-          <label className="field field-row settings-inline-enable">
-            <input
-              type="checkbox"
-              checked={settings.offsetEnabled}
-              onChange={(e) => update({ offsetEnabled: e.target.checked })}
-            />
-            <span>Enable</span>
-          </label>
-        </div>
-
-        {/* Previous-waveform overlay: draws the last confirmed file's
-            traces faded behind the live ones on both charts. */}
-        <div
-          className="settings-item-card settings-item-toggle grid-c2-r1"
-          title="Draw the last confirmed file's traces faded behind the current ones."
-        >
-          <span className="settings-item-name">Overlay previous waveform</span>
-          <label className="field field-row settings-inline-enable">
-            <input
-              type="checkbox"
-              checked={settings.overlayPrevEnabled}
-              onChange={(e) => update({ overlayPrevEnabled: e.target.checked })}
-            />
-            <span>Enable</span>
-          </label>
-        </div>
-
-        {/* Numeric cards share the toggle layout: bold name left,
-            input + unit pushed to the right edge of the card. */}
-        <div
-          className="settings-item-card settings-item-toggle grid-c1-r2"
+          className="settings-item-card settings-item-toggle grid-c1-r1 no-toggle"
           title="Scale applied when the transmitter drive voltage is amplified beyond the oscilloscope-recorded trigger voltage."
         >
           <span className="settings-item-name">Trigger gain</span>
@@ -95,8 +56,9 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           </span>
         </div>
 
+        {/* Peak search width: numeric-only, no Boolean. */}
         <div
-          className="settings-item-card settings-item-toggle grid-c2-r2"
+          className="settings-item-card settings-item-toggle grid-c2-r1 no-toggle"
           title="Half-window used to auto-locate the PTP peak after an STS click."
         >
           <span className="settings-item-name">Peak search width</span>
@@ -118,25 +80,57 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
             <span className="field-unit">µs</span>
           </span>
         </div>
+
+        {/* Offset correction: Boolean-toggle card, light blue only when on. */}
+        <div
+          className={`settings-item-card settings-item-toggle grid-c1-r2${
+            settings.offsetEnabled ? " is-on" : ""
+          }`}
+          title="Subtract the pre-trigger baseline from every sample (offset correction)."
+        >
+          <span className="settings-item-name">
+            Subtract initial voltage
+            <br />
+            (offset correction)
+          </span>
+          <ToggleSwitch
+            checked={settings.offsetEnabled}
+            onChange={(v) => update({ offsetEnabled: v })}
+            title="Subtract the pre-trigger baseline from every sample"
+          />
+        </div>
+
+        {/* Previous-waveform overlay: Boolean-toggle card. */}
+        <div
+          className={`settings-item-card settings-item-toggle grid-c2-r2${
+            settings.overlayPrevEnabled ? " is-on" : ""
+          }`}
+          title="Draw the last confirmed file's traces faded behind the current ones."
+        >
+          <span className="settings-item-name">Overlay previous waveform</span>
+          <ToggleSwitch
+            checked={settings.overlayPrevEnabled}
+            onChange={(v) => update({ overlayPrevEnabled: v })}
+            title="Draw the last confirmed file's traces faded behind the current ones"
+          />
+        </div>
       </section>
 
-      {/* Feature toggles compressed to one bordered line each: heading,
-          Enable checkbox and inline inputs on the same row. The LPF card
-          ends the stack; space below stays free for future HPF controls. */}
+      {/* Feature toggles: one bordered line each with heading, toggle,
+          and unit-suffixed inputs. The LPF card ends the stack; space
+          below stays free for future HPF controls. */}
       <section className="settings-feature-stack">
-        <div className="settings-inline-card">
+        <div
+          className={`settings-inline-card${
+            settings.trimEnabled ? " is-on" : ""
+          }`}
+        >
           <h3 className="settings-inline-heading">Time trimming</h3>
-          <label
-            className="field field-row settings-inline-enable"
-            title="Show only the range between trim start and end."
-          >
-            <input
-              type="checkbox"
-              checked={settings.trimEnabled}
-              onChange={(e) => update({ trimEnabled: e.target.checked })}
-            />
-            <span>Enable</span>
-          </label>
+          <ToggleSwitch
+            checked={settings.trimEnabled}
+            onChange={(v) => update({ trimEnabled: v })}
+            title="Show only the range between trim start and end"
+          />
           <label
             className="settings-inline-field"
             title="Beginning of the time range kept after trimming."
@@ -175,19 +169,17 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           </label>
         </div>
 
-        <div className="settings-inline-card">
+        <div
+          className={`settings-inline-card${
+            settings.velocityEnabled ? " is-on" : ""
+          }`}
+        >
           <h3 className="settings-inline-heading">Wave velocity</h3>
-          <label
-            className="field field-row settings-inline-enable"
-            title="Compute STS/PTP wave velocities on Enter-confirm."
-          >
-            <input
-              type="checkbox"
-              checked={settings.velocityEnabled}
-              onChange={(e) => update({ velocityEnabled: e.target.checked })}
-            />
-            <span>Enable</span>
-          </label>
+          <ToggleSwitch
+            checked={settings.velocityEnabled}
+            onChange={(v) => update({ velocityEnabled: v })}
+            title="Compute STS/PTP wave velocities on Enter-confirm"
+          />
           <label
             className="settings-inline-field"
             title="Trigger-to-receiver distance used by the velocity calculation."
@@ -234,19 +226,17 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
 
         {/* Trigger auto-detection: when armed, App re-derives the Trigger
             STS/PTP picks from the threshold crossing. */}
-        <div className="settings-inline-card">
+        <div
+          className={`settings-inline-card${
+            settings.triggerAutoEnabled ? " is-on" : ""
+          }`}
+        >
           <h3 className="settings-inline-heading">Trigger auto-detection</h3>
-          <label
-            className="field field-row settings-inline-enable"
-            title="Auto-pick Trigger STS at the first threshold crossing and derive PTP."
-          >
-            <input
-              type="checkbox"
-              checked={settings.triggerAutoEnabled}
-              onChange={(e) => update({ triggerAutoEnabled: e.target.checked })}
-            />
-            <span>Enable</span>
-          </label>
+          <ToggleSwitch
+            checked={settings.triggerAutoEnabled}
+            onChange={(v) => update({ triggerAutoEnabled: v })}
+            title="Auto-pick Trigger STS at the first threshold crossing and derive PTP"
+          />
           <label
             className="settings-inline-field"
             title="Voltage level the trigger waveform must cross to set the automatic STS pick."
@@ -272,19 +262,17 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
         {/* Cross-correlation receiver picking: estimates the Receiver
             STS around the previous confirmed pick inside the
             Before/After window. */}
-        <div className="settings-inline-card">
+        <div
+          className={`settings-inline-card${
+            settings.ccEnabled ? " is-on" : ""
+          }`}
+        >
           <h3 className="settings-inline-heading">Cross-correlation</h3>
-          <label
-            className="field field-row settings-inline-enable"
-            title="Estimate Receiver STS by cross-correlation with the last confirmed file, then derive PTP."
-          >
-            <input
-              type="checkbox"
-              checked={settings.ccEnabled}
-              onChange={(e) => update({ ccEnabled: e.target.checked })}
-            />
-            <span>Enable</span>
-          </label>
+          <ToggleSwitch
+            checked={settings.ccEnabled}
+            onChange={(v) => update({ ccEnabled: v })}
+            title="Estimate Receiver STS by cross-correlation with the last confirmed file, then derive PTP"
+          />
           <label
             className="settings-inline-field"
             title="Correlation window reach before the previous Receiver STS."
@@ -330,19 +318,17 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
         {/* Receiver low-pass filter: zero-phase (forward-backward
             Butterworth), smoothing the trace without shifting picks in
             time. Occupies the space reserved below the feature cards. */}
-        <div className="settings-inline-card">
+        <div
+          className={`settings-inline-card${
+            settings.lpfEnabled ? " is-on" : ""
+          }`}
+        >
           <h3 className="settings-inline-heading">LPF for receiver</h3>
-          <label
-            className="field field-row settings-inline-enable"
-            title="Apply a zero-phase 4th-order Butterworth low-pass to the Receiver trace before picking."
-          >
-            <input
-              type="checkbox"
-              checked={settings.lpfEnabled}
-              onChange={(e) => update({ lpfEnabled: e.target.checked })}
-            />
-            <span>Enable</span>
-          </label>
+          <ToggleSwitch
+            checked={settings.lpfEnabled}
+            onChange={(v) => update({ lpfEnabled: v })}
+            title="Apply a zero-phase 4th-order Butterworth low-pass to the Receiver trace before picking"
+          />
           <label
             className="settings-inline-field"
             title="Low-pass cutoff for the Receiver trace. Filtering is skipped when the cutoff reaches the Nyquist frequency."

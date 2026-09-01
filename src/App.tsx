@@ -1324,9 +1324,9 @@ function PickGuidanceBar(props: {
             title="When ON, Skip can advance the queue on an incomplete picker"
           >
             <span className="pick-action-button-label">Allow skip</span>
-            <span className="pick-action-button-switch" aria-hidden="true">
-              <span className="pick-action-button-switch-track" />
-              <span className="pick-action-button-switch-thumb" />
+            <span className="toggle-switch" aria-hidden="true">
+              <span className="toggle-switch-track" />
+              <span className="toggle-switch-thumb" />
             </span>
           </button>
           <button
