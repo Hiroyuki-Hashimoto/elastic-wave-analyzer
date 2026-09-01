@@ -1105,8 +1105,8 @@ export default function App() {
     });
   }, [addNotice]);
 
-  // Global keyboard handler: Enter only. Escape and Z were dropped in
-  // favor of the action button bar, so Enter now mirrors the Next button.
+  // Global keyboard handler: Enter mirrors Next, Escape mirrors Skip.
+  // Z stays dropped in favor of the dedicated Zoom +/− buttons.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Skip when the user is typing into a form field.
@@ -1119,11 +1119,29 @@ export default function App() {
       if (e.key === "Enter") {
         e.preventDefault();
         handleAdvance();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        // Skip is gated by Allow-skip, so the keyboard shortcut
+        // warns instead of bypassing the toggle.
+        if (!skipEnabled) {
+          addNotice(
+            "warning",
+            "Skip is disabled. Enable Allow skip first.",
+          );
+          return;
+        }
+        handleSkip();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleAdvance, mappingRequest]);
+  }, [
+    handleAdvance,
+    handleSkip,
+    mappingRequest,
+    skipEnabled,
+    addNotice,
+  ]);
 
   // Display label for the current file in the progress header.
   const currentIndex = currentEntry
@@ -1313,14 +1331,17 @@ function PickGuidanceBar(props: {
           </button>
           <button
             type="button"
-            className={`pick-action-button pick-action-button-skip${
+            className={`pick-action-button pick-action-button-skip pick-action-button-stacked${
               canSkip ? " is-enabled" : ""
             }`}
             onClick={onSkip}
             disabled={!canSkip}
-            title="Skip the current file without recording picks"
+            title="Skip the current file without recording picks (Esc)"
           >
-            → Skip
+            <span className="pick-action-button-label">→ Skip</span>
+            <span className="pick-action-button-sub">
+              or press <kbd className="kbd-inline">Esc</kbd>
+            </span>
           </button>
         </div>
         {/* Zoom +/-: compact ticks on the right edge of the action row. */}
