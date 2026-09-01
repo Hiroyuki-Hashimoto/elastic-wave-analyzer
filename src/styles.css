@@ -699,6 +699,21 @@ body,
   opacity: 0;
   cursor: pointer;
 }
+/* Disabled toggle: drop the cursor + dim both track and thumb so the
+   inert state reads at a glance. The hidden checkbox carries the
+   actual :disabled semantics; JS also blocks the label click. */
+.toggle-switch.is-disabled {
+  cursor: not-allowed;
+}
+.toggle-switch.is-disabled .toggle-switch-track {
+  background: #d8dde3;
+  border-color: #d8dde3;
+  opacity: 0.7;
+}
+.toggle-switch.is-disabled .toggle-switch-thumb {
+  box-shadow: none;
+  opacity: 0.8;
+}
 .toggle-switch-track {
   position: absolute;
   inset: 0;
@@ -854,9 +869,32 @@ body,
   cursor: not-allowed;
 }
 
-.export-toggle-on {
-  background: #2ca02c;
-  border-color: #2ca02c;
+/* PNG auto-save row: matches the Settings inline-card shape (label +
+   iOS-style toggle) so the same Enable surface appears in both
+   panels. Fills the Export column width to align with the CSV
+   download button above it. */
+.export-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fafbfc;
+  width: 100%;
+}
+.export-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+/* When the toggle is ON the row wears the same light blue wash +
+   accent border used by armed Settings cards, so the active state
+   reads the same across panels. */
+.export-toggle-row:has(.toggle-switch.is-on) {
+  background: #eaf2fb;
+  border-color: var(--accent);
 }
 
 .export-hint {

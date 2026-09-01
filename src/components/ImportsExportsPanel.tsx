@@ -1,4 +1,5 @@
 import React from "react";
+import ToggleSwitch from "./ToggleSwitch";
 
 type Props = {
   onSelectFiles: (files: File[]) => void;
@@ -9,7 +10,12 @@ type Props = {
   /** True when auto-PNG-on-confirm is armed. */
   autoDownloadPng: boolean;
   onDownloadCsv: () => void;
-  onToggleAutoDownloadPng: () => void;
+  /**
+   * Set the auto-PNG flag. Takes a boolean (matching ToggleSwitch's
+   * controlled onChange) rather than a toggle, so the disabled state
+   * can never accidentally arm the flag before a chart exists.
+   */
+  onSetAutoDownloadPng: (next: boolean) => void;
   /** One-line summary of the active import mapping (Auto-detect + ...). */
   importSummary: string;
   /** Open the import mapping editor for the saved/custom mapping. */
@@ -24,7 +30,7 @@ type Props = {
  * stack structure: h3 heading, then a full-width button, then the
  * remaining helper element. This symmetry puts Select or drop CSV
  * file(s) and Download results (CSV) on the same row in their columns
- * and makes the PNG auto-save toggle sit directly below Download
+ * and makes the PNG auto-save toggle row sit directly below Download
  * results (CSV) at the same width. Drag-and-drop is handled globally
  * on the window in App, so no dropzone lives here anymore.
  */
@@ -34,7 +40,7 @@ export default function ImportsExportsPanel({
   canExportPng,
   autoDownloadPng,
   onDownloadCsv,
-  onToggleAutoDownloadPng,
+  onSetAutoDownloadPng,
   importSummary,
   onEditImportMapping,
 }: Props) {
@@ -99,17 +105,19 @@ export default function ImportsExportsPanel({
           >
             Download results (CSV)
           </button>
-          <button
-            type="button"
-            className={`export-button export-toggle ${
-              autoDownloadPng ? "export-toggle-on" : ""
-            }`}
-            onClick={onToggleAutoDownloadPng}
-            disabled={!canExportPng}
-            aria-pressed={autoDownloadPng}
-          >
-            {autoDownloadPng ? "PNG auto-save: ON" : "PNG auto-save: OFF"}
-          </button>
+          {/* PNG auto-save: matches the Settings Enable row shape
+              (label + iOS-style toggle) so the same control surfaces
+              across the panels. Disabled until a chart is loaded so
+              the flag cannot arm ahead of the chart it would snapshot. */}
+          <div className="export-toggle-row">
+            <span className="export-toggle-label">PNG auto-save</span>
+            <ToggleSwitch
+              checked={autoDownloadPng}
+              onChange={onSetAutoDownloadPng}
+              disabled={!canExportPng}
+              title="When ON, pressing Enter to confirm a file also saves the current chart as a PNG"
+            />
+          </div>
           <p className="export-hint">
             When PNG auto-save is ON, pressing Enter to confirm a file
             also saves the current chart as a PNG.

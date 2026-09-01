@@ -2,6 +2,14 @@ type Props = {
   checked: boolean;
   onChange: (next: boolean) => void;
   title?: string;
+  /**
+   * When true, the switch is rendered as inert: the hidden checkbox
+   * becomes :disabled, click/keyboard toggles are swallowed by the
+   * label, and the track fades to a muted gray. Used by PNG auto-save
+   * before any file is loaded so the toggle cannot arm ahead of the
+   * chart it would snapshot.
+   */
+  disabled?: boolean;
 };
 
 /**
@@ -12,12 +20,31 @@ type Props = {
  * via shared .toggle-switch-* CSS (also used by the Allow-skip
  * toggle in the picker action bar).
  */
-export default function ToggleSwitch({ checked, onChange, title }: Props) {
+export default function ToggleSwitch({
+  checked,
+  onChange,
+  title,
+  disabled,
+}: Props) {
+  // The :disabled pseudo-class on the native checkbox stops keyboard
+  // toggles, but some browsers still fire the wrapping label's click.
+  // Swallow that here so the inert state is total.
+  const stopIfDisabled = (e: React.MouseEvent | React.KeyboardEvent) => {
+    if (disabled) e.preventDefault();
+  };
   return (
-    <label className={`toggle-switch${checked ? " is-on" : ""}`} title={title}>
+    <label
+      className={`toggle-switch${checked ? " is-on" : ""}${
+        disabled ? " is-disabled" : ""
+      }`}
+      title={title}
+      onClick={stopIfDisabled}
+      onKeyDown={stopIfDisabled}
+    >
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="toggle-switch-input"
       />

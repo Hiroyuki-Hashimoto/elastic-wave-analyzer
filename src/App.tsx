@@ -949,15 +949,22 @@ export default function App() {
   );
 
   /**
-   * Flip the auto-PNG-on-confirm toggle. The actual PNG capture only
-   * happens during Enter-confirm; this button just arms the flag.
+   * Set the auto-PNG-on-confirm flag to the given value. The actual
+   * PNG capture only happens during Enter-confirm; this just arms the
+   * flag, so a controlled value is what ToggleSwitch expects. Skipping
+   * the notice when the value is unchanged keeps a disabled label from
+   * spamming "PNG auto-save: ON/OFF" notifications on every retry.
    */
-  const handleToggleAutoDownloadPng = useCallback(() => {
-    setAutoDownloadPng((prev) => {
-      addNotice("info", `PNG auto-save: ${prev ? "OFF" : "ON"}`);
-      return !prev;
-    });
-  }, [addNotice]);
+  const handleSetAutoDownloadPng = useCallback(
+    (next: boolean) => {
+      setAutoDownloadPng((prev) => {
+        if (prev === next) return prev;
+        addNotice("info", `PNG auto-save: ${next ? "ON" : "OFF"}`);
+        return next;
+      });
+    },
+    [addNotice],
+  );
 
   /**
    * Flip the skip-allowed toggle. When ON, the dedicated Skip button
@@ -1161,7 +1168,7 @@ export default function App() {
             canExportPng={currentRaw !== null}
             autoDownloadPng={autoDownloadPng}
             onDownloadCsv={handleDownloadCsv}
-            onToggleAutoDownloadPng={handleToggleAutoDownloadPng}
+            onSetAutoDownloadPng={handleSetAutoDownloadPng}
             importSummary={describeImportSummary(mappingMemo)}
             onEditImportMapping={openMappingEditor}
           />
