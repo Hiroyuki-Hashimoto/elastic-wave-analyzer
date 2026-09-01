@@ -48,6 +48,14 @@ body,
   gap: 8px;
 }
 
+/* Panels hidden: the title drops out so the button alone defines the
+   column's width. Switch from space-between (which would pin the
+   single child to the right edge) to flex-start so the button hugs
+   the column's left edge, keeping the chart as wide as possible. */
+.settings-column-header.is-hidden {
+  justify-content: flex-start;
+}
+
 /* Secondary neutral button so the toggle reads as a layout control
    and never competes with the primary accent buttons inside the
    panels. Matches .button-secondary's chrome so the two surfaces

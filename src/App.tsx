@@ -1168,9 +1168,17 @@ export default function App() {
               The toggle button beside the title collapses the three
               panels below so the chart can reclaim their horizontal
               space; the column auto-shrinks to its header width when
-              the panels are gone. */}
-          <div className="settings-column-header">
-            <h1 className="app-title">Elastic Wave Analyzer</h1>
+              the panels are gone. The title itself drops out while the
+              panels are hidden so the button alone defines the column's
+              width and the chart absorbs the freed pixels. */}
+          <div
+            className={`settings-column-header${
+              panelsHidden ? " is-hidden" : ""
+            }`}
+          >
+            {!panelsHidden && (
+              <h1 className="app-title">Elastic Wave Analyzer</h1>
+            )}
             <button
               type="button"
               className="toggle-panels-button"
