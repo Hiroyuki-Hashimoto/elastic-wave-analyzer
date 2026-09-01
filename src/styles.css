@@ -37,6 +37,37 @@ body,
   font-weight: 600;
 }
 
+/* Title + panel-toggle button share one row so the button never
+   widens the chart's left margin by more than its natural width when
+   the panels collapse. space-between pushes the button to the right
+   edge while the title hugs its left edge. */
+.settings-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Secondary neutral button so the toggle reads as a layout control
+   and never competes with the primary accent buttons inside the
+   panels. Matches .button-secondary's chrome so the two surfaces
+   stay visually consistent. */
+.toggle-panels-button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.toggle-panels-button:hover {
+  filter: brightness(0.97);
+}
+
 .app-main {
   flex: 1;
   display: grid;
@@ -45,6 +76,14 @@ body,
   grid-template-columns: 560px 1fr;
   gap: 16px;
   padding: 16px;
+}
+
+/* Panels collapsed: the left column shrinks to the title+button row
+   so the chart area reclaims the 560px it was leaving behind. The
+   gap stays at 16px so the slim header still breathes against the
+   chart edge. */
+.app-main.panels-hidden {
+  grid-template-columns: auto 1fr;
 }
 
 /* Full-window drag feedback while files hover over the page:

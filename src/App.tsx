@@ -138,6 +138,10 @@ export default function App() {
   // picker advances the queue with a canceled row instead of blocking.
   // Resets on every new batch so a stale toggle never carries over.
   const [skipEnabled, setSkipEnabled] = useState(false);
+  // When true, the left-column panels (Imports & Exports, Settings,
+  // Notifications) collapse so the chart area can use that horizontal
+  // space. Flipped by the toggle button next to the app title.
+  const [panelsHidden, setPanelsHidden] = useState(false);
   // True while a file drag is in progress over the window; drives the
   // full-screen "Drop data file(s) here" overlay.
   const [isDragOver, setIsDragOver] = useState(false);
@@ -1157,29 +1161,52 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <main className="app-main">
+      <main className={`app-main${panelsHidden ? " panels-hidden" : ""}`}>
         <div className="settings-column">
           {/* Title sits in the left column so the chart area can span
-              the full viewport height without a header band above it. */}
-          <h1 className="app-title">Elastic Wave Analyzer</h1>
-          <ImportsExportsPanel
-            onSelectFiles={handleFiles}
-            canExport={results.length > 0}
-            canExportPng={currentRaw !== null}
-            autoDownloadPng={autoDownloadPng}
-            onDownloadCsv={handleDownloadCsv}
-            onSetAutoDownloadPng={handleSetAutoDownloadPng}
-            importSummary={describeImportSummary(mappingMemo)}
-            onEditImportMapping={openMappingEditor}
-          />
-          <SettingsPanel
-            settings={settings}
-            onSettingsChange={setSettings}
-          />
-          <NotificationsErrorsPanel
-            errors={allErrors}
-            notices={notices}
-          />
+              the full viewport height without a header band above it.
+              The toggle button beside the title collapses the three
+              panels below so the chart can reclaim their horizontal
+              space; the column auto-shrinks to its header width when
+              the panels are gone. */}
+          <div className="settings-column-header">
+            <h1 className="app-title">Elastic Wave Analyzer</h1>
+            <button
+              type="button"
+              className="toggle-panels-button"
+              onClick={() => setPanelsHidden((prev) => !prev)}
+              aria-expanded={!panelsHidden}
+              title={
+                panelsHidden
+                  ? "Show the settings panels"
+                  : "Hide the settings panels"
+              }
+            >
+              {panelsHidden ? "▶ Show panels" : "▼ Hide panels"}
+            </button>
+          </div>
+          {!panelsHidden && (
+            <>
+              <ImportsExportsPanel
+                onSelectFiles={handleFiles}
+                canExport={results.length > 0}
+                canExportPng={currentRaw !== null}
+                autoDownloadPng={autoDownloadPng}
+                onDownloadCsv={handleDownloadCsv}
+                onSetAutoDownloadPng={handleSetAutoDownloadPng}
+                importSummary={describeImportSummary(mappingMemo)}
+                onEditImportMapping={openMappingEditor}
+              />
+              <SettingsPanel
+                settings={settings}
+                onSettingsChange={setSettings}
+              />
+              <NotificationsErrorsPanel
+                errors={allErrors}
+                notices={notices}
+              />
+            </>
+          )}
         </div>
 
         <section className="chart-area">
