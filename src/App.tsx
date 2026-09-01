@@ -1293,11 +1293,7 @@ function PickGuidanceBar(props: {
     <div className="pick-guidance-row">
       <div className="pick-guidance">
         <p className="pick-guidance-line">
-          Pick the start and peak points for both Trigger and Receiver.
-        </p>
-        <p className="pick-guidance-line">
-          Left click: set Start (rise) point (auto-derives Peak point
-          on the same axis).
+          Left click: set Start point (auto Peak).
         </p>
         <p className="pick-guidance-line">
           Right click: set Peak point manually.
