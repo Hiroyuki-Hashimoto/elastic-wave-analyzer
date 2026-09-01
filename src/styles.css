@@ -544,34 +544,239 @@ body,
   color: var(--text);
 }
 
-.pick-guidance {
+/* Picker furniture wrapper: text panel + action row share one band so
+   they stay visually aligned, but the panel itself only frames text. */
+.pick-guidance-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
   margin: 0 0 8px;
-  padding: 6px 10px;
+}
+
+.pick-guidance {
+  /* Text-only frame. Doubled width (480px) lets the three sentences
+     sit on three physical lines instead of reflowing into five, so
+     the row height can shrink to roughly 2/3 of its previous value
+     and the chart below gets the leftover pixels. */
+  margin: 0;
+  padding: 4px 8px;
   background: #f5f8ff;
   border: 1px solid #cdd9ee;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  flex: 0 0 480px;
+  min-width: 0;
+}
+
+.pick-actions {
+  /* The text panel now eats ~480px, so the action row gets whatever
+     the chart area has left. Single row of 4 cells (Next / skip-group
+     / Zoom+ / Zoom-); Zoom columns compressed to make room. */
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1.5fr 1.2fr 0.8fr 0.8fr;
   gap: 4px;
+  align-items: stretch;
 }
 
 .pick-guidance-line {
   margin: 0;
-  line-height: 1.5;
+  /* Tighter line-height so three sentences fit in roughly 2/3 of the
+     previous row height; the chart stack absorbs the recovered px. */
+  line-height: 1.3;
 }
 
-.pick-guidance kbd {
+/* Shared base for every button in the action grid. Padding shrunk
+   alongside the row height so the bar compresses to roughly 2/3 of
+   its previous vertical footprint without losing hit target. */
+.pick-action-button {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  line-height: 1.2;
+  /* Stack-driven row tracks already size each cell; min-width:0 keeps
+     long labels from forcing the grid wider than the half bar. */
+  min-width: 0;
+}
+
+.pick-action-button:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.pick-action-button:disabled {
+  background: #c4ccd4;
+  border-color: #c4ccd4;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+/* Primary call-to-action look: same blue used for the import/export
+   buttons so the user reads "Next" as the page's main advance action. */
+.pick-action-button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.pick-action-button-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+/* Allow-skip toggle: the button itself stays panel-colored so it
+   never reads as a second primary action; only the switch track and
+   the button border turn accent when armed. Label hugs the left edge,
+   switch hugs the right. */
+.pick-action-button-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.pick-action-button-toggle.is-on {
+  border-color: var(--accent);
+}
+
+/* iOS-style toggle pill: track + thumb. The parent button's
+   aria-pressed carries the real on/off state; these spans are purely
+   visual so they are aria-hidden in the markup. */
+.pick-action-button-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.pick-action-button-switch-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: #c4ccd4;
+  border: 1px solid var(--border);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pick-action-button-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+/* ON state: track fills with accent and thumb slides right by the
+   track's interior width (36 - 2 - 2 - 14 = 18, rounded to 16 to
+   avoid hugging the inner border). */
+.pick-action-button-toggle.is-on .pick-action-button-switch-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.pick-action-button-toggle.is-on .pick-action-button-switch-thumb {
+  transform: translateX(16px);
+}
+
+/* Allow-skip + Skip share a rounded frame so they read as one
+   logical "skip" pair; the inner buttons drop their own borders and
+   round only the outer corners to fuse into the group. */
+.pick-action-skip-group {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  overflow: hidden;
+  min-width: 0;
+}
+.pick-action-skip-group .pick-action-button {
+  border: none;
+  border-radius: 0;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.pick-action-skip-group .pick-action-button + .pick-action-button {
+  /* Hairline divider between the toggle and the Skip fire control. */
+  border-left: 1px solid var(--border);
+}
+/* Allow-skip inside the group keeps the toggle's flex layout; the
+   switch sits to the right of the label just like in standalone use. */
+.pick-action-skip-group .pick-action-button-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 8px;
+  text-align: left;
+}
+/* Skip button: when armed (Allow-skip ON), the text turns accent so
+   the user sees the previously dead-end control is now live. The
+   outer frame is shared with the group, so we only restyle text. */
+.pick-action-button-skip.is-enabled {
+  color: var(--accent);
+}
+.pick-action-button-skip.is-enabled:hover:not(:disabled) {
+  background: rgba(31, 119, 180, 0.08);
+}
+
+/* Next button stacks a bold title over a faint "or press Enter" hint;
+   column flex keeps the two lines centered regardless of row height. */
+.pick-action-button-stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 8px;
+}
+
+.pick-action-button-label {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.pick-action-button-sub {
+  font-size: 11px;
+  line-height: 1.1;
+  /* Translucent white on the primary blue so it reads as a hint, not
+     a second headline; the kbd badge inside resets to solid colors. */
+  color: rgba(255, 255, 255, 0.85);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Inline kbd badge used on the Next button. Replaces the old guidance
+   kbd style with a translucent shell so it stays legible on the blue
+   primary background without breaking contrast on the default buttons. */
+.kbd-inline {
   display: inline-block;
   padding: 1px 5px;
-  margin: 0 2px;
-  background: #ffffff;
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 3px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   color: var(--text);
+  line-height: 1.1;
 }
 
 .export-button {

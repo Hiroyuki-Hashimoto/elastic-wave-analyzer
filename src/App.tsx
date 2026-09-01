@@ -134,6 +134,10 @@ export default function App() {
   const chartHandleRef = useRef<WaveformChartHandle | null>(null);
   // When true, Enter-confirm also auto-downloads the current chart as PNG.
   const [autoDownloadPng, setAutoDownloadPng] = useState(false);
+  // Local skip-allowed flag: when true, Next/Enter on an incomplete
+  // picker advances the queue with a canceled row instead of blocking.
+  // Resets on every new batch so a stale toggle never carries over.
+  const [skipEnabled, setSkipEnabled] = useState(false);
   // True while a file drag is in progress over the window; drives the
   // full-screen "Drop data file(s) here" overlay.
   const [isDragOver, setIsDragOver] = useState(false);
@@ -540,6 +544,9 @@ export default function App() {
         ...rest.map((e) => ({ ...e })),
       ]);
       setPicker(emptyPickerState());
+      // Fresh batch starts with skip OFF so a stale toggle cannot
+      // silently auto-cancel files in the next session.
+      setSkipEnabled(false);
       if (entries.length > 1) {
         addNotice(
           "info",
@@ -952,116 +959,171 @@ export default function App() {
     });
   }, [addNotice]);
 
-  // Global keyboard handler: Enter / Escape / Z.
+  /**
+   * Flip the skip-allowed toggle. When ON, the dedicated Skip button
+   * becomes live and can advance the queue on an incomplete picker;
+   * when OFF, the Skip button stays disabled so the user must finish
+   * picking first.
+   */
+  const handleToggleSkip = useCallback(() => {
+    setSkipEnabled((prev) => {
+      addNotice("info", `Skip allowed: ${prev ? "OFF" : "ON"}`);
+      return !prev;
+    });
+  }, [addNotice]);
+
+  /**
+   * Shared Next/Enter action. Confirms only when all four picks are
+   * placed (mirroring the original Enter behavior: prevOverlay freeze,
+   * optional auto-PNG, queue advance). Skipping moved to its own
+   * Skip button so Next stays a strict confirm. Velocity guard wins
+   * so an undefined velocity never advances.
+   */
+  const handleAdvance = useCallback(() => {
+    if (!currentRaw) return;
+    const allPicks =
+      picker.triggerSts &&
+      picker.triggerPtp &&
+      picker.receiverSts &&
+      picker.receiverPtp;
+    if (!allPicks) {
+      addNotice(
+        "warning",
+        "Cannot confirm: all four picks are required.",
+      );
+      return;
+    }
+    // Snapshot of the velocity config consumed by pickerToAnalysisResult.
+    const velocityConfig: VelocityConfig = {
+      enabled: settings.velocityEnabled,
+      distanceMm: settings.distanceMm,
+      systemDelayUs: settings.systemDelayUs,
+    };
+    const result = pickerToAnalysisResult(
+      { ...picker, isConfirmed: true, isCanceled: false },
+      currentRaw.fileName,
+      velocityConfig,
+    );
+    if (settings.velocityEnabled) {
+      const blocked: string[] = [];
+      if (result.stsVelocityMps === null) blocked.push("STS");
+      if (result.ptpVelocityMps === null) blocked.push("PTP");
+      if (blocked.length > 0) {
+        addNotice(
+          "warning",
+          `Cannot confirm: ${blocked.join(" and ")} velocity is undefined ` +
+            `(effective delta-T is zero or negative, or distance is non-positive). ` +
+            `Enter blocked.`,
+        );
+        return;
+      }
+    }
+    recordResult(picker, true, velocityConfig);
+    // Freeze the just-confirmed display and its picks as the
+    // reference overlay for the following files; skip never touches this.
+    const {
+      triggerSts,
+      triggerPtp,
+      receiverSts,
+      receiverPtp,
+    } = picker;
+    if (
+      goodDisplayRef.current &&
+      triggerSts &&
+      triggerPtp &&
+      receiverSts &&
+      receiverPtp
+    ) {
+      setPrevOverlay({
+        display: goodDisplayRef.current,
+        picks: {
+          triggerSts,
+          triggerPtp,
+          receiverSts,
+          receiverPtp,
+          isConfirmed: false,
+          isCanceled: false,
+        },
+      });
+    }
+    const msg = buildConfirmMessage(currentRaw.fileName, result);
+    if (msg) addNotice("success", msg);
+    if (autoDownloadPng) {
+      capturePng("auto");
+    }
+    advanceQueue("confirmed");
+  }, [
+    currentRaw,
+    picker,
+    settings.velocityEnabled,
+    settings.distanceMm,
+    settings.systemDelayUs,
+    autoDownloadPng,
+    recordResult,
+    advanceQueue,
+    addNotice,
+    capturePng,
+  ]);
+
+  /**
+   * Skip the current file unconditionally (no picks recorded). Caller
+   * is responsible for guarding with Allow-skip and a loaded file;
+   * the Skip button itself is disabled while Allow-skip is OFF.
+   */
+  const handleSkip = useCallback(() => {
+    if (!currentRaw) return;
+    recordResult(picker, false);
+    addNotice("cancel", `Analysis skipped for ${currentRaw.fileName}.`);
+    advanceQueue("canceled");
+  }, [currentRaw, picker, recordResult, advanceQueue, addNotice]);
+
+  /**
+   * Step the chart x-zoom in by one ZOOM_PERCENTAGES tick. Clamped at
+   * the maximum so the deepest zoom stays reachable, no wrap-around.
+   */
+  const handleZoomIn = useCallback(() => {
+    setSettings((prev) => {
+      const max = ZOOM_PERCENTAGES.length - 1;
+      const next = Math.min(max, prev.zoomIndex + 1);
+      if (next === prev.zoomIndex) return prev;
+      addNotice("info", `Zoom: ${Math.round(ZOOM_PERCENTAGES[next] * 100)}%`);
+      return { ...prev, zoomIndex: next };
+    });
+  }, [addNotice]);
+
+  /**
+   * Step the chart x-zoom out by one ZOOM_PERCENTAGES tick. Clamped at
+   * 100% (index 0) so the user never accidentally overshoots the full
+   * range.
+   */
+  const handleZoomOut = useCallback(() => {
+    setSettings((prev) => {
+      const next = Math.max(0, prev.zoomIndex - 1);
+      if (next === prev.zoomIndex) return prev;
+      addNotice("info", `Zoom: ${Math.round(ZOOM_PERCENTAGES[next] * 100)}%`);
+      return { ...prev, zoomIndex: next };
+    });
+  }, [addNotice]);
+
+  // Global keyboard handler: Enter only. Escape and Z were dropped in
+  // favor of the action button bar, so Enter now mirrors the Next button.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Skip when the user is typing into a form field.
       if (isEditableTarget(e.target)) return;
       // Modifier-key combos are reserved for browser shortcuts.
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      // While the mapping dialog is open, picks/zoom stay frozen so
-      // the user's keystrokes only affect the dialog's own controls.
+      // While the mapping dialog is open, picks stay frozen so the
+      // user's keystrokes only affect the dialog's own controls.
       if (mappingRequest) return;
-
       if (e.key === "Enter") {
-        if (!currentRaw) return;
-        const allPicks =
-          picker.triggerSts &&
-          picker.triggerPtp &&
-          picker.receiverSts &&
-          picker.receiverPtp;
-        if (!allPicks) {
-          addNotice(
-            "warning",
-            "Cannot confirm: all four picks are required.",
-          );
-          return;
-        }
-        // Snapshot of the velocity config consumed by pickerToAnalysisResult.
-        const velocityConfig: VelocityConfig = {
-          enabled: settings.velocityEnabled,
-          distanceMm: settings.distanceMm,
-          systemDelayUs: settings.systemDelayUs,
-        };
-        // Compute the result up front: needed both to validate velocity
-        // and to feed the success notice without a second call.
-        const result = pickerToAnalysisResult(
-          { ...picker, isConfirmed: true, isCanceled: false },
-          currentRaw.fileName,
-          velocityConfig,
-        );
-        // Velocity guard: zero or negative effective delta-T (system
-        // delay equals or exceeds the measured delta-T, or distance is
-        // non-positive) yields an undefined velocity. When velocity
-        // calculation is enabled, treat that as a hard block on Enter:
-        // emit a warning and do NOT record or advance the queue.
-        if (settings.velocityEnabled) {
-          const blocked: string[] = [];
-          if (result.stsVelocityMps === null) blocked.push("STS");
-          if (result.ptpVelocityMps === null) blocked.push("PTP");
-          if (blocked.length > 0) {
-            addNotice(
-              "warning",
-              `Cannot confirm: ${blocked.join(" and ")} velocity is undefined ` +
-                `(effective delta-T is zero or negative, or distance is non-positive). ` +
-                `Enter blocked.`,
-            );
-            return;
-          }
-        }
-        recordResult(picker, true, velocityConfig);
-        // Freeze the just-confirmed display and its picks as the
-        // reference overlay for the following files (mirrors the Python
-        // analyzer's close()); Escape never touches this snapshot.
-        const {
-          triggerSts,
-          triggerPtp,
-          receiverSts,
-          receiverPtp,
-        } = picker;
-        if (
-          goodDisplayRef.current &&
-          triggerSts &&
-          triggerPtp &&
-          receiverSts &&
-          receiverPtp
-        ) {
-          setPrevOverlay({
-            display: goodDisplayRef.current,
-            picks: {
-              triggerSts,
-              triggerPtp,
-              receiverSts,
-              receiverPtp,
-              isConfirmed: false,
-              isCanceled: false,
-            },
-          });
-        }
-        const msg = buildConfirmMessage(currentRaw.fileName, result);
-        if (msg) addNotice("success", msg);
-        // Auto-PNG: snapshot the current chart when the toggle is on.
-        if (autoDownloadPng) {
-          capturePng("auto");
-        }
-        advanceQueue("confirmed");
-      } else if (e.key === "Escape") {
-        if (!currentRaw) return;
-        recordResult(picker, false);
-        addNotice("cancel", `Analysis canceled for ${currentRaw.fileName}.`);
-        advanceQueue("canceled");
-      } else if (e.key === "z" || e.key === "Z") {
-        // Cycle through the seven zoom levels, wrapping back to 100%.
-        setSettings((prev) => {
-          const next = (prev.zoomIndex + 1) % ZOOM_PERCENTAGES.length;
-          addNotice("info", `Zoom: ${Math.round(ZOOM_PERCENTAGES[next] * 100)}%`);
-          return { ...prev, zoomIndex: next };
-        });
+        e.preventDefault();
+        handleAdvance();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [currentRaw, picker, recordResult, advanceQueue, addNotice, autoDownloadPng, capturePng, settings, mappingRequest]);
+  }, [handleAdvance, mappingRequest]);
 
   // Display label for the current file in the progress header.
   const currentIndex = currentEntry
@@ -1109,7 +1171,19 @@ export default function App() {
               waveform loaded (or after the batch finishes) only its
               content swaps to a placeholder, so the Results table
               never jumps upward. */}
-          {currentRaw ? <PickGuidance /> : null}
+          {currentRaw ? (
+            <PickGuidanceBar
+              skipEnabled={skipEnabled}
+              mappingOpen={mappingRequest != null}
+              canZoomIn={settings.zoomIndex < ZOOM_PERCENTAGES.length - 1}
+              canZoomOut={settings.zoomIndex > 0}
+              onAdvance={handleAdvance}
+              onSkip={handleSkip}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onToggleSkip={handleToggleSkip}
+            />
+          ) : null}
           <div className="chart-stack">
             {currentRaw && chartDisplay ? (
               <WaveformChart
@@ -1153,28 +1227,122 @@ export default function App() {
 }
 
 /**
- * Static 3-line guidance that always sits above the chart while a
- * file is loaded. It tells the user the picking goal, the click
- * semantics, and the global keyboard shortcuts. The text never
- * changes between renders because the spec calls for a fixed help
- * block, not a dynamic next-step indicator.
+ * Narrow guidance panel (left) paired with a single-row action bar
+ * (right). The text panel only frames the explanation; all action
+ * controls live in the right-hand grid as siblings so the picker
+ * furniture never bleeds across the chart boundary.
+ *
+ * Action flow:
+ *  - Next: strict confirm only; mirrors the Enter key.
+ *  - Allow-skip: iOS-style toggle; arms the Skip button.
+ *  - Skip: skip the current file without recording; disabled until
+ *    Allow-skip is ON.
+ *  - Zoom +/-: step the chart x-zoom in fixed ticks.
  */
-function PickGuidance() {
+function PickGuidanceBar(props: {
+  skipEnabled: boolean;
+  mappingOpen: boolean;
+  canZoomIn: boolean;
+  canZoomOut: boolean;
+  onAdvance: () => void;
+  onSkip: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onToggleSkip: () => void;
+}) {
+  const {
+    skipEnabled,
+    mappingOpen,
+    canZoomIn,
+    canZoomOut,
+    onAdvance,
+    onSkip,
+    onZoomIn,
+    onZoomOut,
+    onToggleSkip,
+  } = props;
+  // Skip is live only when the user has armed Allow-skip and the
+  // mapping dialog is closed; same disabled-when conditions as Zoom.
+  const canSkip = skipEnabled && !mappingOpen;
   return (
-    <div className="pick-guidance">
-      <p className="pick-guidance-line">
-        Pick the start and peak points for both Trigger and Receiver.
-      </p>
-      <p className="pick-guidance-line">
-        Left click: set Start (rise) point (auto-derives Peak point
-        on the same axis). Right click: set Peak point manually.
-      </p>
-      <p className="pick-guidance-line">
-        <kbd>Enter</kbd> confirm{" · "}
-        <kbd>Esc</kbd> skip this file{" · "}
-        <kbd>Z</kbd> zoom (resets pan){" · "}
-        drag the bar under a chart to pan while zoomed
-      </p>
+    <div className="pick-guidance-row">
+      <div className="pick-guidance">
+        <p className="pick-guidance-line">
+          Pick the start and peak points for both Trigger and Receiver.
+        </p>
+        <p className="pick-guidance-line">
+          Left click: set Start (rise) point (auto-derives Peak point
+          on the same axis).
+        </p>
+        <p className="pick-guidance-line">
+          Right click: set Peak point manually.
+        </p>
+      </div>
+      <div className="pick-actions">
+        {/* Next: primary call-to-action with stacked label + Enter hint. */}
+        <button
+          type="button"
+          className="pick-action-button pick-action-button-primary pick-action-button-stacked"
+          onClick={onAdvance}
+          disabled={mappingOpen}
+          title="Confirm and advance to the next file (requires all four picks)"
+        >
+          <span className="pick-action-button-label">▶ Next</span>
+          <span className="pick-action-button-sub">
+            or press <kbd className="kbd-inline">Enter</kbd>
+          </span>
+        </button>
+        {/* Allow-skip + Skip grouped in a shared rounded frame so they
+           read as one logical "skip" pair. Allow-skip is the iOS-style
+           toggle; Skip is the actual fire control. */}
+        <div className="pick-action-skip-group">
+          <button
+            type="button"
+            className={`pick-action-button pick-action-button-toggle${
+              skipEnabled ? " is-on" : ""
+            }`}
+            onClick={onToggleSkip}
+            aria-pressed={skipEnabled}
+            title="When ON, Skip can advance the queue on an incomplete picker"
+          >
+            <span className="pick-action-button-label">Allow skip</span>
+            <span className="pick-action-button-switch" aria-hidden="true">
+              <span className="pick-action-button-switch-track" />
+              <span className="pick-action-button-switch-thumb" />
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`pick-action-button pick-action-button-skip${
+              canSkip ? " is-enabled" : ""
+            }`}
+            onClick={onSkip}
+            disabled={!canSkip}
+            title="Skip the current file without recording picks"
+          >
+            → Skip
+          </button>
+        </div>
+        {/* Zoom +/-: compact ticks on the right edge of the action row. */}
+        <button
+          type="button"
+          className="pick-action-button"
+          onClick={onZoomIn}
+          disabled={!canZoomIn || mappingOpen}
+          title="Zoom in (smaller x-range)"
+        >
+          ⊕ Zoom+
+        </button>
+        <button
+          type="button"
+          className="pick-action-button"
+          onClick={onZoomOut}
+          disabled={!canZoomOut || mappingOpen}
+          title="Zoom out (larger x-range)"
+        >
+          ⊖ Zoom−
+        </button>
+      </div>
     </div>
   );
 }
