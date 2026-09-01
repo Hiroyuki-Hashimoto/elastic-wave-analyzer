@@ -726,23 +726,29 @@ body,
   padding: 4px 8px;
   text-align: left;
 }
-/* Skip button: when armed (Allow-skip ON), the text turns accent so
-   the user sees the previously dead-end control is now live. The
-   outer frame is shared with the group, so we only restyle text.
-   The "or press Esc" sub line underneath uses muted so it stays
-   readable on the panel background (the primary blue sub color
-   reserved above would wash out on a white button). */
+/* Skip button: when armed (Allow-skip ON), it fills with accent and
+   the text turns white so the user reads it as a live primary action
+   sitting next to Allow-skip. The left divider inherited from the
+   skip-group is hidden so the accent color reaches the toggle seam. */
 .pick-action-button-skip.is-enabled {
-  color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.pick-action-button-skip.is-enabled:has(+ *) {
+  /* Hide the inherited divider when Skip is armed so the accent
+     paint runs flush against the toggle boundary. */
+  border-left-color: transparent;
 }
 .pick-action-button-skip.is-enabled:hover:not(:disabled) {
-  background: rgba(31, 119, 180, 0.08);
+  filter: brightness(1.05);
 }
+/* Sub line: muted on the white disabled state, translucent white on
+   the blue enabled state so it stays readable on either background. */
 .pick-action-button-skip .pick-action-button-sub {
   color: var(--muted);
 }
 .pick-action-button-skip.is-enabled .pick-action-button-sub {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* Next button stacks a bold title over a faint "or press Enter" hint;
