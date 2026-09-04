@@ -118,10 +118,6 @@ export default function ImportsExportsPanel({
               title="When ON, pressing Enter to confirm a file also saves the current chart as a PNG"
             />
           </div>
-          <p className="export-hint">
-            When PNG auto-save is ON, pressing Enter to confirm a file
-            also saves the current chart as a PNG.
-          </p>
         </div>
       </section>
     </aside>
