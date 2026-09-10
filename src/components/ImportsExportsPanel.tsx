@@ -11,8 +11,6 @@ type Props = {
   onSelectInputFolder: (files: File[], folderName: string) => void;
   /** True when at least one confirmed or canceled result is available. */
   canExport: boolean;
-  /** True when a file is loaded and a chart is rendered. */
-  canExportPng: boolean;
   /** True when auto-PNG-on-confirm is armed. */
   autoDownloadPng: boolean;
   onDownloadCsv: () => void;
@@ -48,7 +46,6 @@ export default function ImportsExportsPanel({
   onSelectFiles,
   onSelectInputFolder,
   canExport,
-  canExportPng,
   autoDownloadPng,
   onDownloadCsv,
   onSetAutoDownloadPng,
@@ -160,14 +157,15 @@ export default function ImportsExportsPanel({
           </button>
           {/* PNG auto-save: matches the Settings Enable row shape
               (label + iOS-style toggle) so the same control surfaces
-              across the panels. Disabled until a chart is loaded so
-              the flag cannot arm ahead of the chart it would snapshot. */}
+              across the panels. Stays interactive regardless of
+              whether a file is loaded, so the user can pre-arm the
+              flag before the first chart exists; the toggle is just
+              a preference until Enter-confirm runs. */}
           <div className="export-toggle-row">
             <span className="export-toggle-label">PNG auto-save</span>
             <ToggleSwitch
               checked={autoDownloadPng}
               onChange={onSetAutoDownloadPng}
-              disabled={!canExportPng}
               title="When ON, pressing Enter to confirm a file also saves the current chart as a PNG"
             />
           </div>

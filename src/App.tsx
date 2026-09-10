@@ -81,6 +81,14 @@ const SETTINGS_STORAGE_KEY = "elastic-wave-analyzer/settings/v1";
 const MAPPING_STORAGE_KEY = "elastic-wave-analyzer/import-mapping/v1";
 
 /**
+ * localStorage key for the export-side user preference. Today the
+ * only field it carries is the PNG auto-save toggle state, but the
+ * object wrapper makes it trivial to add further export settings
+ * (default CSV folder, etc.) without changing the storage shape.
+ */
+const EXPORT_STORAGE_KEY = "elastic-wave-analyzer/export-settings/v1";
+
+/**
  * Outcome of the one-time settings read: values restored verbatim,
  * nothing stored yet (first visit), or a stored blob that failed
  * validation and was discarded in favour of the defaults.
@@ -143,7 +151,9 @@ export default function App() {
   // Imperative handle into the chart for PNG export.
   const chartHandleRef = useRef<WaveformChartHandle | null>(null);
   // When true, Enter-confirm also auto-downloads the current chart as PNG.
-  const [autoDownloadPng, setAutoDownloadPng] = useState(false);
+  const [autoDownloadPng, setAutoDownloadPng] = useState(
+    loadStoredAutoDownloadPng,
+  );
   // Local skip-allowed flag: when true, Next/Enter on an incomplete
   // picker advances the queue with a canceled row instead of blocking.
   // Resets on every new batch so a stale toggle never carries over.
@@ -315,6 +325,14 @@ export default function App() {
   useEffect(() => {
     saveStoredMappingMemo(mappingMemo);
   }, [mappingMemo]);
+
+  // Persist the PNG auto-save preference to localStorage so a reload
+  // (or revisit on the same origin) restores the toggle's last
+  // position. Initial state is `false`; the one-shot loader below
+  // upgrades it on mount if a previously saved value is valid.
+  useEffect(() => {
+    saveStoredAutoDownloadPng(autoDownloadPng);
+  }, [autoDownloadPng]);
 
   // Trigger auto-detection: while armed, derive the Trigger STS pick from
   // the first displayed sample at/above the threshold and derive PTP with
@@ -1404,7 +1422,6 @@ export default function App() {
               <ImportsExportsPanel
                 onSelectFiles={handleFiles}
                 canExport={results.length > 0}
-                canExportPng={currentRaw !== null}
                 autoDownloadPng={autoDownloadPng}
                 onDownloadCsv={handleDownloadCsv}
                 onSetAutoDownloadPng={handleSetAutoDownloadPng}
@@ -1859,6 +1876,50 @@ function saveStoredMappingMemo(memo: ImportMappingMemo | null): void {
     } else {
       localStorage.setItem(MAPPING_STORAGE_KEY, JSON.stringify(memo));
     }
+  } catch {
+    /* storage unavailable: persistence is optional */
+  }
+}
+
+/**
+ * Read the persisted PNG auto-save preference from localStorage.
+ * Any shape drift — wrong key set, wrong value type, or invalid
+ * JSON — falls back to `false` so a stale blob can never silently
+ * flip the toggle after an app update.
+ */
+function loadStoredAutoDownloadPng(): boolean {
+  try {
+    const text = localStorage.getItem(EXPORT_STORAGE_KEY);
+    if (!text) return false;
+    const raw: unknown = JSON.parse(text);
+    if (
+      raw === null ||
+      typeof raw !== "object" ||
+      Array.isArray(raw) ||
+      Object.keys(raw as Record<string, unknown>).length !== 1
+    ) {
+      return false;
+    }
+    const value = (raw as Record<string, unknown>).autoDownloadPng;
+    return typeof value === "boolean" ? value : false;
+  } catch {
+    // Corrupt JSON or unavailable storage: start with the default.
+    return false;
+  }
+}
+
+/**
+ * Persist the PNG auto-save preference so a reload (or revisit on
+ * the same origin) restores the toggle's last position. Best-effort
+ * only; private mode and quota errors are swallowed because saving
+ * must never break the app.
+ */
+function saveStoredAutoDownloadPng(value: boolean): void {
+  try {
+    localStorage.setItem(
+      EXPORT_STORAGE_KEY,
+      JSON.stringify({ autoDownloadPng: value }),
+    );
   } catch {
     /* storage unavailable: persistence is optional */
   }
