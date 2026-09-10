@@ -129,6 +129,64 @@ export function downloadResultsCsv(results: AnalysisResult[]): string {
 }
 
 /**
+ * Stream a CSV text payload to a File System Access file handle. The
+ * handle must be writable; the caller is responsible for obtaining it
+ * (typically via `window.showSaveFilePicker`). Mirrors the PNG writer
+ * in this file: open the writable, write, close.
+ */
+export async function saveCsvToFileHandle(
+  fileHandle: FileSystemFileHandle,
+  csv: string,
+): Promise<void> {
+  const writable = await fileHandle.createWritable();
+  await writable.write(csv);
+  await writable.close();
+}
+
+/**
+ * Open the OS "Save As" dialog via `window.showSaveFilePicker` and
+ * write the results CSV to whatever file the user picks. Unlike
+ * `showDirectoryPicker` the save picker does not raise the
+ * "Allow this site" grant: the user is choosing a file, not
+ * donating directory access, so no extra permission is required.
+ *
+ * `startIn` is the folder the dialog should open in: pass the
+ * persisted output-folder handle so the user lands where their
+ * PNGs already go, or fall back to `'documents'` when no folder
+ * has been picked yet.
+ *
+ * Returns:
+ *   - "saved"    when the CSV was written to the chosen file
+ *   - "canceled" when the user dismissed the dialog (AbortError)
+ *
+ * Throws when the browser does not implement `showSaveFilePicker`
+ * (Chromium-only); the caller is expected to catch and fall back to
+ * the legacy `<a download>` path so non-Chromium browsers still get a
+ * working download.
+ */
+export async function saveResultsCsvWithPicker(
+  results: AnalysisResult[],
+  options: {
+    suggestedName: string;
+    startIn?: FileSystemHandle | "documents" | "downloads";
+  },
+): Promise<"saved" | "canceled"> {
+  const fileHandle = await window.showSaveFilePicker({
+    suggestedName: options.suggestedName,
+    startIn: options.startIn,
+    types: [
+      {
+        description: "CSV file",
+        accept: { "text/csv": [".csv"] },
+      },
+    ],
+  });
+  const csv = exportResultsCsv(results);
+  await saveCsvToFileHandle(fileHandle, csv);
+  return "saved";
+}
+
+/**
  * Build a download filename of the form <prefix>_YYYY-MM-DD_HH-mm-ss.<ext>
  * using the local clock. Pure function (no side effects on Date) so it
  * can be unit-tested with a fixed clock.

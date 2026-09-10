@@ -19,7 +19,12 @@ import {
   findTriggerStsByThreshold,
   pickerToAnalysisResult,
 } from "./lib/picker";
-import { downloadResultsCsv, exportChartPng } from "./lib/exporter";
+import {
+  downloadResultsCsv,
+  exportChartPng,
+  makeTimestampedFileName,
+  saveResultsCsvWithPicker,
+} from "./lib/exporter";
 import {
   estimateSamplingRateHz,
   validateLpf,
@@ -1066,11 +1071,41 @@ export default function App() {
   );
 
   /**
-   * Trigger the all-results CSV download. Disabled when there is nothing
-   * to export, so the user never gets an empty file.
+   * Trigger the all-results CSV save. Prefers the native Save As
+   * dialog (no "Allow this site" prompt: the user is just choosing a
+   * file) so the user can pick a folder and filename at save time.
+   * The dialog starts in the persisted output folder when one is
+   * selected, otherwise in Documents.
+   *
+   * Browsers without `showSaveFilePicker` (Firefox/Safari) fall back
+   * to the legacy `<a download>` path so the button never becomes
+   * a no-op for those users.
    */
-  const handleDownloadCsv = useCallback(() => {
+  const handleDownloadCsv = useCallback(async () => {
     if (results.length === 0) return;
+    const suggestedName = makeTimestampedFileName("analysis_results", "csv");
+    if (typeof window.showSaveFilePicker === "function") {
+      try {
+        const outcome = await saveResultsCsvWithPicker(results, {
+          suggestedName,
+          startIn: outputDirectory?.handle ?? "documents",
+        });
+        if (outcome === "saved") {
+          addNotice(
+            "info",
+            `Saved ${results.length} result(s) as ${suggestedName}.`,
+          );
+        }
+        // 'canceled' is the user closing the dialog: stay silent.
+      } catch (e) {
+        addNotice(
+          "error",
+          `CSV save failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+      return;
+    }
+    // Fallback: classic anchor download (still no permission dialog).
     try {
       downloadResultsCsv(results);
       addNotice("info", `Downloaded ${results.length} result(s) as CSV.`);
@@ -1080,7 +1115,7 @@ export default function App() {
         `CSV export failed: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
-  }, [results, addNotice]);
+  }, [results, addNotice, outputDirectory]);
 
   /**
    * Capture the current chart canvases (Trigger + Receiver) and save
