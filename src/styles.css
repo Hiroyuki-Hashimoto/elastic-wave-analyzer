@@ -37,6 +37,36 @@ body,
   font-weight: 600;
 }
 
+/* Title + repo link share a left-aligned cluster so the toggle button
+   keeps the row's right edge under space-between. */
+.app-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Repo link reads smaller than the 18px title and stays muted until
+   hovered; inline-flex keeps the icon glued to the label. */
+.repo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.repo-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+/* Icon inherits the link color so hover recolors both at once. */
+.repo-link-icon {
+  flex: 0 0 auto;
+}
+
 /* Title + panel-toggle button share one row so the button never
    widens the chart's left margin by more than its natural width when
    the panels collapse. space-between pushes the button to the right
