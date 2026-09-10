@@ -65,6 +65,40 @@ Chromium 系のブラウザ (**Chrome**, **Edge**, **Opera**) で、フル HD (1
 | 結果とエクスポート | ファイル単位の結果表、結果 CSV のダウンロード、PNG チャート出力 (確認時の自動保存)。 |
 | オフラインとインストール | Service Worker の precache により完全オフラインで動作。スタンドアロンアプリとしてインストール可能で、更新時はアプリ内 Reload 通知。 |
 
+### Output CSV columns
+
+| Column | Description |
+| --- | --- |
+| File_Name | Source CSV file name. |
+| Trig_Start(us) | Trigger Start pick time in µs. Empty when the file is not confirmed. |
+| Trig_Peak(us) | Trigger Peak pick time in µs. Empty when the file is not confirmed. |
+| Rec_Start(us) | Receiver Start pick time in µs. Empty when the file is not confirmed. |
+| Rec_Peak(us) | Receiver Peak pick time in µs. Empty when the file is not confirmed. |
+| deltaT_STS(us) | Start-to-Start (STS) travel time, Receiver Start minus Trigger Start, in µs. Empty when the file is not confirmed. |
+| deltaT_PTP(us) | Peak-to-Peak (PTP) travel time, Receiver Peak minus Trigger Peak, in µs. Empty when the file is not confirmed. |
+| deltaT_STS_corrected(us) | STS travel time minus the system delay in µs. Empty when wave velocity calculation is off. |
+| deltaT_PTP_corrected(us) | PTP travel time minus the system delay in µs. Empty when wave velocity calculation is off. |
+| velocity_STS(m/s) | Wave velocity from the STS travel time in m/s. Empty when wave velocity calculation is off or the corrected travel time is not positive. |
+| velocity_PTP(m/s) | Wave velocity from the PTP travel time in m/s. Empty when wave velocity calculation is off or the corrected travel time is not positive. |
+| Distance(mm) | Propagation distance in mm used for the velocity calculation. Empty when wave velocity calculation is off. |
+
+### 出力CSVの列
+
+| 列 | 説明 |
+| --- | --- |
+| File_Name | 元の CSV ファイル名。 |
+| Trig_Start(us) | Trigger 側の Start 読み取り時刻 (µs)。未確定ファイルでは空。 |
+| Trig_Peak(us) | Trigger 側の Peak 読み取り時刻 (µs)。未確定ファイルでは空。 |
+| Rec_Start(us) | Receiver 側の Start 読み取り時刻 (µs)。未確定ファイルでは空。 |
+| Rec_Peak(us) | Receiver 側の Peak 読み取り時刻 (µs)。未確定ファイルでは空。 |
+| deltaT_STS(us) | Start-to-Start (STS、立ち上がり間) 伝播時間 (Receiver Start − Trigger Start、µs)。未確定ファイルでは空。 |
+| deltaT_PTP(us) | Peak-to-Peak (PTP、ピーク間) 伝播時間 (Receiver Peak − Trigger Peak、µs)。未確定ファイルでは空。 |
+| deltaT_STS_corrected(us) | システム遅延を差し引いた STS 伝播時間 (µs)。速度計算 OFF では空。 |
+| deltaT_PTP_corrected(us) | システム遅延を差し引いた PTP 伝播時間 (µs)。速度計算 OFF では空。 |
+| velocity_STS(m/s) | STS 伝播時間からの弾性波速度 (m/s)。速度計算 OFF、または補正後伝播時間が正でない場合は空。 |
+| velocity_PTP(m/s) | PTP 伝播時間からの弾性波速度 (m/s)。速度計算 OFF、または補正後伝播時間が正でない場合は空。 |
+| Distance(mm) | 速度計算に用いた伝播距離 (mm)。速度計算 OFF では空。 |
+
 ## License
 
 Released under the [MIT License](./LICENSE).
