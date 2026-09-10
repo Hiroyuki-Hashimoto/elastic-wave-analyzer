@@ -25,27 +25,6 @@ uploaded to any server.
 
 CSV の処理はすべてブラウザ内で行われ、サーバーには一切アップロードされません。
 
-Every newly loaded file format is confirmed in a mapping dialog that
-shows the auto-detected interpretation (delimiter, skipped metadata
-lines, column roles, units) next to the raw head of the file with the
-mapped Time/Transmitter/Receiver cells colorized, so the guess can be
-checked against the actual content and corrected by hand — including
-files the detector cannot recognize at all. The confirmed mapping is
-saved in your browser's local storage together with the header it was
-confirmed for; files with exactly the same header load directly from
-then on, even after a reload. The dialog can be reopened at any time
-from the Imports panel ("Import mapping…"); edits apply to future
-loads.
-
-新しく読み込んだファイル形式は、必ずマッピングダイアログで内容を確認します。ダイアログには自動検出された解釈 (区切り文字、スキップされるメタデータ行、列の役割、単位) がファイルの生ヘッダの隣に表示され、Time / Transmitter / Receiver の対応するセルは色付けされます。これにより、自動検出の推定値を実際の内容と突き合わせて手動で修正できます (検出器が認識できないファイルでも同様です)。確認されたマッピングは、確認時に使ったヘッダ情報とともにブラウザのローカルストレージに保存されます。完全に同じヘッダを持つファイルは、リロード後もそのまま直接読み込まれます。ダイアログは Imports パネルから「Import mapping…」でいつでも再表示でき、編集は今後の読み込みに適用されます。
-
-Display settings are saved automatically in your browser's local
-storage and restored on your next visit. If an update changes the
-settings parameters, previously saved values are discarded and the
-defaults are used instead.
-
-表示設定はブラウザのローカルストレージに自動保存され、次回アクセス時に復元されます。アップデートにより設定項目が変わった場合、保存されていた古い値は無視され、デフォルト値が代わりに使われます。
-
 Intended for use on a Chromium-based browser (**Chrome**, **Edge**,
 **Opera**), on a PC with a Full HD (1920 × 1080) or higher display.
 
