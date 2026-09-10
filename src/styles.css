@@ -1575,3 +1575,34 @@ body,
      files" so the action button never collapses. */
   min-width: 120px;
 }
+
+/* --- Output folder row (Exports column) --- */
+.output-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  /* Same chrome as the PNG auto-save row so both read as Export
+     surface cards. */
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fafbfc;
+  width: 100%;
+}
+
+.output-folder-label {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.output-folder-name {
+  font-weight: 600;
+  color: var(--text);
+  /* Take leftover width so the Change link sticks to the right and
+     the name wraps gracefully on long folder names. */
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-all;
+}

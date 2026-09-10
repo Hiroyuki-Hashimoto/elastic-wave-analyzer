@@ -24,6 +24,12 @@ type Props = {
   onSetAutoDownloadPng: (next: boolean) => void;
   /** Open the import mapping editor for the saved/custom mapping. */
   onEditImportMapping: () => void;
+  /** Display name of the persisted output folder, if any. */
+  outputFolderName: string | null;
+  /** Open the FSA directory picker to pick an output folder. */
+  onSelectOutputFolder: () => void;
+  /** Open the FSA directory picker to replace the current folder. */
+  onChangeOutputFolder: () => void;
 };
 
 /**
@@ -47,6 +53,9 @@ export default function ImportsExportsPanel({
   onDownloadCsv,
   onSetAutoDownloadPng,
   onEditImportMapping,
+  outputFolderName,
+  onSelectOutputFolder,
+  onChangeOutputFolder,
 }: Props) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const folderInputRef = React.useRef<HTMLInputElement>(null);
@@ -166,6 +175,35 @@ export default function ImportsExportsPanel({
             When PNG auto-save is ON, pressing Enter to confirm a file
             also saves the current chart as a PNG.
           </p>
+          {/* Output folder: shows the current pick so the user knows
+              where PNGs go. When unset, PNGs fall back to the browser
+              download path. The text wraps on long folder names. */}
+          {outputFolderName ? (
+            <div className="output-folder-row">
+              <span className="output-folder-label">Output folder:</span>
+              <span
+                className="output-folder-name"
+                title={outputFolderName}
+              >
+                {outputFolderName}
+              </span>
+              <button
+                type="button"
+                className="link-button"
+                onClick={onChangeOutputFolder}
+              >
+                Change folder
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="file-button"
+              onClick={onSelectOutputFolder}
+            >
+              Select output folder
+            </button>
+          )}
         </div>
       </section>
     </aside>

@@ -1,14 +1,45 @@
 /// <reference types="vite/client" />
 
 /**
- * TypeScript 5.6's lib.dom.d.ts does not expose `showSaveFilePicker`
- * on `Window`, which the CSV "Save As" flow uses to let the user pick
- * a filename + folder at download time without invoking the "Allow
- * this site" directory grant. Adding the missing ambient declaration
- * here keeps the rest of the code strictly typed; the runtime still
- * requires a Chromium-based browser.
+ * TypeScript 5.6's lib.dom.d.ts does not expose the File System
+ * Access API surface used by the export features. The output-folder
+ * flow calls `showDirectoryPicker` and writes through the directory
+ * handle; the CSV Save-As flow calls `showSaveFilePicker`. The
+ * async `values()` iterator on `FileSystemDirectoryHandle` is also
+ * missing. Adding the missing ambient declarations here keeps the
+ * rest of the code strictly typed; the runtime still requires a
+ * Chromium-based browser for any of these to be available.
  */
+interface FileSystemDirectoryHandle {
+  values(): AsyncIterableIterator<FileSystemHandle>;
+}
+
+/**
+ * `FileSystemHandle` in lib.dom.d.ts only carries `kind`, `name`,
+ * and `isSameEntry()`. The permission helpers used by persistence
+ * live on the same interface in the browser; adding them here keeps
+ * the code strictly typed without pulling in a separate type lib.
+ */
+type FileSystemHandlePermissionDescriptor = {
+  mode?: "read" | "readwrite";
+};
+type FileSystemPermissionState = "granted" | "prompt" | "denied";
+
+interface FileSystemHandle {
+  queryPermission(
+    descriptor?: FileSystemHandlePermissionDescriptor,
+  ): Promise<FileSystemPermissionState>;
+  requestPermission(
+    descriptor?: FileSystemHandlePermissionDescriptor,
+  ): Promise<FileSystemPermissionState>;
+}
+
 interface Window {
+  showDirectoryPicker(options?: {
+    mode?: "read" | "readwrite";
+    startIn?: FileSystemHandle | "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos";
+  }): Promise<FileSystemDirectoryHandle>;
+
   showSaveFilePicker(options?: {
     suggestedName?: string;
     startIn?: FileSystemHandle | "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos";

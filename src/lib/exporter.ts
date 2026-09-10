@@ -146,16 +146,48 @@ export function makeTimestampedFileName(
 }
 
 /**
- * Export the current chart as a PNG download. Combines the
- * two uPlot canvases (Trigger on top, Receiver on bottom) into one
- * PNG so the saved image matches what the user sees on screen,
- * including the axes, grid, and any STS/PTP marker overlays drawn via
- * the chart's hooks.draw callback.
+ * Write a PNG blob straight to a directory obtained from
+ * `showDirectoryPicker`. Creates a file under the given name (any
+ * existing file is overwritten) and streams the blob through a
+ * writable so the call returns only once the bytes are flushed.
+ * Throws when the user revoked permission or the directory was
+ * moved/deleted out from under the persisted handle.
+ */
+export async function savePngToDirectory(
+  dirHandle: FileSystemDirectoryHandle,
+  fileName: string,
+  blob: Blob,
+): Promise<void> {
+  // `create: true` lets an existing file be replaced — that matches
+  // the "Overwrite?" behaviour the user would get with a Save As
+  // dialog, so re-confirming a file with the same name does not
+  // silently keep the old PNG.
+  const fileHandle = await dirHandle.getFileHandle(fileName, {
+    create: true,
+  });
+  const writable = await fileHandle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+}
+
+/**
+ * Export the current chart as a PNG. Combines the two uPlot canvases
+ * (Trigger on top, Receiver on bottom) into one PNG so the saved
+ * image matches what the user sees on screen, including the axes,
+ * grid, and any STS/PTP marker overlays drawn via the chart's
+ * hooks.draw callback.
+ *
+ * When `directoryHandle` is provided, the PNG is written straight to
+ * that folder via the File System Access API. Otherwise the call
+ * falls back to the legacy `<a download>` path so browsers without
+ * FSA support (or sessions where no output folder has been picked)
+ * keep their old behaviour.
  */
 export function exportChartPng(
   triggerCanvas: HTMLCanvasElement,
   receiverCanvas: HTMLCanvasElement,
   fileName: string,
+  directoryHandle: FileSystemDirectoryHandle | null = null,
 ): void {
   // Trim the original .csv extension if present; the user passes the
   // raw source file name and the PNG is named after it.
@@ -181,15 +213,27 @@ export function exportChartPng(
   ctx.drawImage(triggerCanvas, 0, 0);
   ctx.drawImage(receiverCanvas, 0, triggerCanvas.height + gap);
 
-  // Download the merged canvas as a PNG.
+  // Pick the write target up-front so the blob callback stays small
+  // and any error path can surface to the caller.
+  const outName = `${baseName}.png`;
+  const writeToDirectory = directoryHandle
+    ? (blob: Blob) => savePngToDirectory(directoryHandle, outName, blob)
+    : null;
+
   merged.toBlob((blob) => {
     if (!blob) {
       throw new Error("exportChartPng: PNG blob creation failed.");
     }
+    if (writeToDirectory) {
+      // Fire-and-forget: the synchronous wrapper above already
+      // returned; App awaits the same promise via capturePng below.
+      void writeToDirectory(blob);
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${baseName}.png`;
+    a.download = outName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

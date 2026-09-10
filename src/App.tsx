@@ -34,6 +34,10 @@ import {
   STANDARD_CSV_SPEC,
 } from "./lib/importer";
 import {
+  loadOutputFolderHandle,
+  saveOutputFolderHandle,
+} from "./lib/persistence";
+import {
   buildDisplayWaveform,
   validateTrim,
 } from "./lib/waveform";
@@ -174,6 +178,13 @@ export default function App() {
   const [pendingFolder, setPendingFolder] = useState<{
     folderName: string;
     files: File[];
+  } | null>(null);
+  // Persisted output folder for PNG auto-save. The handle survives a
+  // reload via IndexedDB so PNGs keep writing to the same place
+  // without the user re-picking the folder every session.
+  const [outputDirectory, setOutputDirectory] = useState<{
+    handle: FileSystemDirectoryHandle;
+    name: string;
   } | null>(null);
 
   // The current entry is the single 'current' row in the queue, or null.
@@ -789,6 +800,97 @@ export default function App() {
   }, []);
 
   /**
+   * Try to restore the previously saved output folder handle from
+   * IndexedDB on mount. Failure (no record, revoked permission, FSA
+   * unavailable) leaves `outputDirectory` null so the panel shows the
+   * default "no folder selected" state and PNGs keep falling back to
+   * the browser download path.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const handle = await loadOutputFolderHandle();
+        if (cancelled || !handle) return;
+        setOutputDirectory({ handle, name: handle.name });
+      } catch (e) {
+        // Persistence is best-effort; stay silent on a restore error
+        // since the panel can show "not selected" by default.
+        if (!cancelled) {
+          addNotice(
+            "warning",
+            `Could not restore output folder: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [addNotice]);
+
+  /**
+   * Common picker flow: open showDirectoryPicker in readwrite mode,
+   * sanity-check the result, then update state and IndexedDB. Returns
+   * the chosen handle on success or null if the user cancelled or
+   * the browser lacks FSA. The two callers (initial pick and change)
+   * differ only in their notice text and how they label the action.
+   */
+  const pickOutputFolder = useCallback(
+    async (action: "select" | "change"): Promise<FileSystemDirectoryHandle | null> => {
+      if (typeof window.showDirectoryPicker !== "function") {
+        addNotice(
+          "error",
+          "Output folder selection requires a browser with the File System Access API (Chrome/Edge/Opera).",
+        );
+        return null;
+      }
+      let handle: FileSystemDirectoryHandle;
+      try {
+        handle = await window.showDirectoryPicker({ mode: "readwrite" });
+      } catch (e) {
+        // User dismissed the picker: stay silent, no error to surface.
+        if (e instanceof DOMException && e.name === "AbortError") return null;
+        addNotice(
+          "error",
+          `Output folder selection failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        return null;
+      }
+      // `create: true` is implicit on the picker call; permission is
+      // already "granted" since the picker just returned the handle.
+      try {
+        await saveOutputFolderHandle(handle);
+      } catch (e) {
+        addNotice(
+          "error",
+          `Failed to persist output folder: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        // The handle is still usable for this session even if we
+        // cannot save it; surface the error but keep the in-memory
+        // pick so the current session keeps working.
+      }
+      setOutputDirectory({ handle, name: handle.name });
+      addNotice(
+        "info",
+        `Output folder ${action === "change" ? "changed to" : "set to"} ${handle.name}. PNG auto-save now writes there.`,
+      );
+      return handle;
+    },
+    [addNotice],
+  );
+
+  /** First-time pick: call into the shared picker flow. */
+  const handleSelectOutputFolder = useCallback(() => {
+    void pickOutputFolder("select");
+  }, [pickOutputFolder]);
+
+  /** Replace the currently selected folder with a new one. */
+  const handleChangeOutputFolder = useCallback(() => {
+    void pickOutputFolder("change");
+  }, [pickOutputFolder]);
+
+  /**
    * Dialog confirm: remember the mapping against this group's header,
    * parse every file in the group under it, and either move on to the
    * next format group or commit the whole batch to the queue.
@@ -996,7 +1098,15 @@ export default function App() {
         // Force a redraw so the export reflects the latest picker state
         // and any pending uPlot internal rendering.
         handle.redraw();
-        exportChartPng(trigger, receiver, entry.fileName);
+        // When the user picked an output folder, write the PNG
+        // directly there; otherwise fall back to the browser download
+        // path baked into exportChartPng.
+        exportChartPng(
+          trigger,
+          receiver,
+          entry.fileName,
+          outputDirectory?.handle ?? null,
+        );
         addNotice(
           "info",
           `Saved chart as ${entry.fileName.replace(/\.csv$/i, "")}.png (${source}).`,
@@ -1010,7 +1120,7 @@ export default function App() {
         return false;
       }
     },
-    [addNotice, currentEntry],
+    [addNotice, currentEntry, outputDirectory],
   );
 
   /**
@@ -1265,6 +1375,9 @@ export default function App() {
                 onSetAutoDownloadPng={handleSetAutoDownloadPng}
                 onEditImportMapping={openMappingEditor}
                 onSelectInputFolder={handleSelectInputFolder}
+                outputFolderName={outputDirectory?.name ?? null}
+                onSelectOutputFolder={handleSelectOutputFolder}
+                onChangeOutputFolder={handleChangeOutputFolder}
               />
               <SettingsPanel
                 settings={settings}
