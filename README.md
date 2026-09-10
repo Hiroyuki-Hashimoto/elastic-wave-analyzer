@@ -36,8 +36,8 @@ storage and restored on your next visit. If an update changes the
 settings parameters, previously saved values are discarded and the
 defaults are used instead.
 
-Intended for use on desktop browsers at around Full HD resolution
-(1920 × 1080).
+Intended for use on a Chromium-based browser (**Chrome**, **Edge**,
+**Opera**), on a PC with a Full HD (1920 × 1080) or higher display.
 
 ## Features
 
