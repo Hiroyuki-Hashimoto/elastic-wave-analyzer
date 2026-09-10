@@ -14,7 +14,7 @@ type Props = {
  *      (Subtract initial voltage, Overlay previous waveform) follow
  *      on row 2.
  *   2. One-line feature cards (Time trimming, Wave velocity, Trigger
- *      auto-detection, Cross-correlation, LPF): heading, iOS-style
+ *      auto-detection, Receiver cross-correlation, Receiver LPF): heading, iOS-style
  *      toggle and unit-suffixed inputs share a single bordered row.
  *      Room remains below for future HPF controls. The file picker,
  *      results CSV download, and PNG auto-save toggle live in
@@ -59,7 +59,7 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
         {/* Peak search width: numeric-only, no Boolean. */}
         <div
           className="settings-item-card settings-item-toggle grid-c2-r1 no-toggle"
-          title="Half-window used to auto-locate the PTP peak after an STS click."
+          title="Half-window used to auto-locate the peak point."
         >
           <span className="settings-item-name">Peak search width</span>
           <span className="settings-input-group">
@@ -178,7 +178,7 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           <ToggleSwitch
             checked={settings.velocityEnabled}
             onChange={(v) => update({ velocityEnabled: v })}
-            title="Compute STS/PTP wave velocities on Enter-confirm"
+            title="Compute Start-to-Start (STS) / Peak-to-Peak (PTP) wave velocities"
           />
           <label
             className="settings-inline-field"
@@ -201,7 +201,7 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           </label>
           <label
             className="settings-inline-field"
-            title="Correction subtracted from the measured delta-T before computing wave velocity."
+            title="Correction subtracted from the measured wave travel time before computing wave velocity."
           >
             {/* Two-line label keeps the aligned label column narrow. */}
             <span className="field-label">
@@ -235,11 +235,11 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           <ToggleSwitch
             checked={settings.triggerAutoEnabled}
             onChange={(v) => update({ triggerAutoEnabled: v })}
-            title="Auto-pick Trigger STS at the first threshold crossing and derive PTP"
+            title="Auto-pick Trigger Start point at the first threshold crossing and derive Peak point"
           />
           <label
             className="settings-inline-field"
-            title="Voltage level the trigger waveform must cross to set the automatic STS pick."
+            title="Voltage level the trigger waveform must cross to set the automatic Start point."
           >
             <span className="field-label">Threshold</span>
             <input
@@ -267,15 +267,15 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
             settings.ccEnabled ? " is-on" : ""
           }`}
         >
-          <h3 className="settings-inline-heading">Cross-correlation</h3>
+          <h3 className="settings-inline-heading">Receiver cross-correlation</h3>
           <ToggleSwitch
             checked={settings.ccEnabled}
             onChange={(v) => update({ ccEnabled: v })}
-            title="Estimate Receiver STS by cross-correlation with the last confirmed file, then derive PTP"
+            title="Estimate Receiver Start point by cross-correlation with the last confirmed file, then derive Peak point"
           />
           <label
             className="settings-inline-field"
-            title="Correlation window reach before the previous Receiver STS."
+            title="Correlation window reach before the previous Receiver Start point."
           >
             <span className="field-label">Before</span>
             <input
@@ -296,7 +296,7 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
           </label>
           <label
             className="settings-inline-field"
-            title="Correlation window reach after the previous Receiver STS."
+            title="Correlation window reach after the previous Receiver Start point."
           >
             <span className="field-label">After</span>
             <input
@@ -323,7 +323,7 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
             settings.lpfEnabled ? " is-on" : ""
           }`}
         >
-          <h3 className="settings-inline-heading">LPF for receiver</h3>
+          <h3 className="settings-inline-heading">Receiver LPF</h3>
           <ToggleSwitch
             checked={settings.lpfEnabled}
             onChange={(v) => update({ lpfEnabled: v })}
