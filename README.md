@@ -19,7 +19,7 @@ previous-waveform overlay, and wave velocity calculation.
 
 ## Web app
 
-<https://hiroyuki-hashimoto.github.io/elastic-wave-analyzer/>
+**Application URL:** <https://hiroyuki-hashimoto.github.io/elastic-wave-analyzer/>
 
 CSV files are processed entirely in your browser — nothing is
 uploaded to any server.
@@ -65,7 +65,7 @@ Chromium 系のブラウザ (**Chrome**, **Edge**, **Opera**) で、フル HD (1
 | 結果とエクスポート | ファイル単位の結果表、結果 CSV のダウンロード、PNG チャート出力 (確認時の自動保存)。 |
 | オフラインとインストール | Service Worker の precache により完全オフラインで動作。スタンドアロンアプリとしてインストール可能で、更新時はアプリ内 Reload 通知。 |
 
-### Output CSV columns
+## Output CSV columns
 
 | Column | Description |
 | --- | --- |
@@ -81,8 +81,6 @@ Chromium 系のブラウザ (**Chrome**, **Edge**, **Opera**) で、フル HD (1
 | velocity_STS(m/s) | Wave velocity from the STS travel time in m/s. Empty when wave velocity calculation is off or the corrected travel time is not positive. |
 | velocity_PTP(m/s) | Wave velocity from the PTP travel time in m/s. Empty when wave velocity calculation is off or the corrected travel time is not positive. |
 | Distance(mm) | Propagation distance in mm used for the velocity calculation. Empty when wave velocity calculation is off. |
-
-### 出力CSVの列
 
 | 列 | 説明 |
 | --- | --- |
