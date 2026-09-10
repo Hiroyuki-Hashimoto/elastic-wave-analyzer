@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// PWA update channel (virtual module provided by vite-plugin-pwa).
+import { useRegisterSW } from "virtual:pwa-register/react";
 import ImportsExportsPanel from "./components/ImportsExportsPanel";
 import ImportMappingDialog, {
   type MappingRequest,
@@ -146,6 +148,13 @@ export default function App() {
   // Monotonic counter so each notice gets a unique key for React.
   const noticeIdRef = useRef(0);
   const [notices, setNotices] = useState<Notice[]>([]);
+  // PWA update channel: with registerType "prompt" the waiting worker
+  // surfaces here instead of taking over; the banner in the render
+  // below offers Reload. No-op in dev (no worker is registered there).
+  const {
+    needRefresh: [pwaNeedRefresh],
+    updateServiceWorker: updatePwa,
+  } = useRegisterSW();
   // Monotonic counter for stable queue keys.
   const queueIdRef = useRef(0);
   // Imperative handle into the chart for PNG export.
@@ -1385,6 +1394,20 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {pwaNeedRefresh && (
+        // New bundle precached by the waiting worker; Reload activates
+        // it. Fixed overlay so it shows regardless of panel visibility.
+        <div className="pwa-update-banner" role="status">
+          <span>A new version is available.</span>
+          <button
+            type="button"
+            className="file-button pwa-update-button"
+            onClick={() => void updatePwa(true)}
+          >
+            Reload
+          </button>
+        </div>
+      )}
       <main className={`app-main${panelsHidden ? " panels-hidden" : ""}`}>
         <div className="settings-column">
           {/* Title sits in the left column so the chart area can span

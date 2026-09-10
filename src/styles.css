@@ -1606,3 +1606,28 @@ body,
   min-width: 0;
   word-break: break-all;
 }
+
+/* PWA update banner: fixed overlay pinned to the top center so a
+   precached new version is announced without disturbing the layout.
+   Reuses the .file-button shape for the Reload action. */
+.pwa-update-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(26, 31, 36, 0.18);
+}
+
+.pwa-update-button {
+  /* Shrink the shared button shape to fit the one-line banner. */
+  padding: 4px 12px;
+}

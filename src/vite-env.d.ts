@@ -1,4 +1,7 @@
 /// <reference types="vite/client" />
+// Types for the virtual:pwa-register/react module used by App.tsx to
+// surface waiting service-worker updates in React state.
+/// <reference types="vite-plugin-pwa/client" />
 
 /**
  * TypeScript 5.6's lib.dom.d.ts does not expose the File System
