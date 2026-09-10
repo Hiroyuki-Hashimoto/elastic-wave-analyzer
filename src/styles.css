@@ -1136,26 +1136,14 @@ body,
   }
 }
 
-/* --- Import mapping summary row (Imports panel) --- */
+/* --- Import mapping row (Imports panel) --- */
 .import-mapping-row {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  /* Wrap long custom-mapping strings instead of stretching the column. */
+  /* Wrap the lone link on narrow columns rather than overflowing. */
   flex-wrap: wrap;
-}
-
-.import-mapping-label {
-  color: var(--muted);
-  flex-shrink: 0;
-}
-
-.import-mapping-text {
-  /* Take leftover width so the Edit button sticks to the right. */
-  flex: 1 1 auto;
-  min-width: 0;
-  word-break: break-all;
 }
 
 /* Borderless text button reusing accent color; distinct from the solid

@@ -3,6 +3,8 @@ import ToggleSwitch from "./ToggleSwitch";
 
 type Props = {
   onSelectFiles: (files: File[]) => void;
+  /** Open the directory picker and load every supported file inside. */
+  onSelectInputFolder: () => void;
   /** True when at least one confirmed or canceled result is available. */
   canExport: boolean;
   /** True when a file is loaded and a chart is rendered. */
@@ -16,8 +18,6 @@ type Props = {
    * can never accidentally arm the flag before a chart exists.
    */
   onSetAutoDownloadPng: (next: boolean) => void;
-  /** One-line summary of the active import mapping (Auto-detect + ...). */
-  importSummary: string;
   /** Open the import mapping editor for the saved/custom mapping. */
   onEditImportMapping: () => void;
 };
@@ -36,12 +36,12 @@ type Props = {
  */
 export default function ImportsExportsPanel({
   onSelectFiles,
+  onSelectInputFolder,
   canExport,
   canExportPng,
   autoDownloadPng,
   onDownloadCsv,
   onSetAutoDownloadPng,
-  importSummary,
   onEditImportMapping,
 }: Props) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -50,7 +50,7 @@ export default function ImportsExportsPanel({
     <aside className="imports-exports-panel">
       <h2 className="imports-exports-title">Imports &amp; Exports</h2>
       <section className="imports-exports-grid">
-        {/* Imports column: heading + file picker, stacked. */}
+        {/* Imports column: heading + two pickers + mapping editor link. */}
         <div className="imports-exports-stack">
           <h3 className="settings-section-heading">Imports</h3>
           {/* Hidden native file input triggered by the button click. */}
@@ -76,13 +76,20 @@ export default function ImportsExportsPanel({
               e.target.value = "";
             }}
           />
-          {/* Mapping summary + editor: shows the confirmed mapping and
-              opens the mapping dialog at any time so a wrong choice can
-              be fixed — edits apply to future loads (re-drop to reload
-              already processed files). */}
+          {/* Folder picker: opens the system directory dialog via the
+              File System Access API. A second same-width button keeps
+              the Imports column shape even with the picker added. */}
+          <button
+            type="button"
+            className="file-button"
+            onClick={onSelectInputFolder}
+          >
+            Select input folder
+          </button>
+          {/* Mapping editor: link only, since the saved-mapping
+              summary was dropped to make room for the folder button.
+              Clicking it still opens the full mapping dialog. */}
           <div className="import-mapping-row">
-            <span className="import-mapping-label">Mapping</span>
-            <span className="import-mapping-text">{importSummary}</span>
             <button
               type="button"
               className="link-button"

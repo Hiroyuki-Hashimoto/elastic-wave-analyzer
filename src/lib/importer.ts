@@ -503,3 +503,37 @@ export function readFileText(file: File): Promise<string> {
     reader.readAsText(file);
   });
 }
+
+/**
+ * List the supported data files at the top level of a directory handle
+ * obtained from `window.showDirectoryPicker()`. Recurses one level deep
+ * (subdirectory entries whose own iterator yields data files) so a
+ * single-frequency test folder can be grouped by sample, but does not
+ * walk arbitrary depth to keep the load bounded. Returned files are
+ * sorted by name with `localeCompare` so 2 < 10 reads naturally.
+ */
+export async function listDataFilesInDirectory(
+  dirHandle: FileSystemDirectoryHandle,
+): Promise<File[]> {
+  const collected: File[] = [];
+  // Top-level entries: file -> wrap; subdirectory -> recurse one level.
+  // The parent `FileSystemHandle` type does not expose `getFile()` /
+  // `values()`; the kind check + cast narrows to the concrete subtype
+  // the runtime actually returns.
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === "file") {
+      if (/\.(csv|tsv|txt)$/i.test(entry.name)) {
+        collected.push(await (entry as FileSystemFileHandle).getFile());
+      }
+    } else if (entry.kind === "directory") {
+      const subDir = entry as FileSystemDirectoryHandle;
+      for await (const sub of subDir.values()) {
+        if (sub.kind === "file" && /\.(csv|tsv|txt)$/i.test(sub.name)) {
+          collected.push(await (sub as FileSystemFileHandle).getFile());
+        }
+      }
+    }
+  }
+  collected.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  return collected;
+}

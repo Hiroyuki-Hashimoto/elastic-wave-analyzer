@@ -25,6 +25,7 @@ import {
 } from "./lib/lpf";
 import {
   guessImportSpec,
+  listDataFilesInDirectory,
   matchesMemoHeader,
   matchesRememberedSpec,
   parseWithSpec,
@@ -732,6 +733,56 @@ export default function App() {
   }, [mappingMemo]);
 
   /**
+   * Open the system directory picker and feed every supported file
+   * found in (or one level under) the chosen folder into the regular
+   * load pipeline. Uses the File System Access API exclusively; the
+   * caller surfaces an error notice when the browser lacks support.
+   */
+  const handleSelectInputFolder = useCallback(async () => {
+    if (typeof window.showDirectoryPicker !== "function") {
+      addNotice(
+        "error",
+        "Folder selection requires a browser with the File System Access API (Chrome/Edge/Opera).",
+      );
+      return;
+    }
+    let dirHandle: FileSystemDirectoryHandle;
+    try {
+      dirHandle = await window.showDirectoryPicker({ mode: "read" });
+    } catch (e) {
+      // User dismissed the picker: stay silent, no error to surface.
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      addNotice(
+        "error",
+        `Folder selection failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return;
+    }
+    let files: File[];
+    try {
+      files = await listDataFilesInDirectory(dirHandle);
+    } catch (e) {
+      addNotice(
+        "error",
+        `Failed to read folder: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return;
+    }
+    if (files.length === 0) {
+      addNotice(
+        "warning",
+        `No .csv/.tsv/.txt files found in ${dirHandle.name}.`,
+      );
+      return;
+    }
+    addNotice(
+      "info",
+      `Reading ${files.length} file(s) from folder ${dirHandle.name} in name order.`,
+    );
+    void handleFiles(files);
+  }, [addNotice, handleFiles]);
+
+  /**
    * Dialog confirm: remember the mapping against this group's header,
    * parse every file in the group under it, and either move on to the
    * next format group or commit the whole batch to the queue.
@@ -1206,8 +1257,8 @@ export default function App() {
                 autoDownloadPng={autoDownloadPng}
                 onDownloadCsv={handleDownloadCsv}
                 onSetAutoDownloadPng={handleSetAutoDownloadPng}
-                importSummary={describeImportSummary(mappingMemo)}
                 onEditImportMapping={openMappingEditor}
+                onSelectInputFolder={handleSelectInputFolder}
               />
               <SettingsPanel
                 settings={settings}
@@ -1478,28 +1529,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
 /** Stable identity of a detection result: identical spec and header. */
 function groupKeyOf(detected: DetectedImport | null): string {
   return detected == null ? "unrecognized" : JSON.stringify(detected);
-}
-
-/**
- * One-line summary of the saved import mapping for the Imports panel:
- * what the mapping is, and that files with the same header skip the
- * confirmation popup from now on.
- */
-function describeImportSummary(memo: ImportMappingMemo | null): string {
-  if (!memo) return "Auto-detect — each new format asks once";
-  const spec = memo.spec;
-  const delim =
-    spec.delimiter === "\t"
-      ? "tab"
-      : spec.delimiter === "whitespace"
-        ? "spaces"
-        : spec.delimiter;
-  return `Confirmed (${delim}, skip ${spec.skipLines}, ` +
-    `cols ${spec.timeColumn + 1}/${spec.transmitterColumn + 1}/` +
-    `${spec.receiverColumn + 1}, ${spec.timeUnit}, ` +
-    `transmitter ${spec.transmitterVoltageUnit} / ` +
-    `receiver ${spec.receiverVoltageUnit}) ` +
-    `— same header loads directly`;
 }
 
 /**
