@@ -4,10 +4,10 @@ import { resampleOnto } from "./waveform";
 /** Return a PickerState with all four picks unset and no confirm/cancel. */
 export function emptyPickerState(): PickerState {
   return {
-    triggerSts: null,
-    triggerPtp: null,
-    receiverSts: null,
-    receiverPtp: null,
+    triggerStart: null,
+    triggerPeak: null,
+    receiverStart: null,
+    receiverPeak: null,
     isConfirmed: false,
     isCanceled: false,
   };
@@ -38,12 +38,12 @@ export function findNearestSampleIndex(
 }
 
 /**
- * Find the first Trigger STS index where the displayed voltage reaches
+ * Find the first Trigger Start index where the displayed voltage reaches
  * a threshold (rising-edge crossing). Values are the gain/offset-applied
  * Transmitter samples, so thresholdV is compared on the chart's scale.
  * Returns -1 for empty input or when no sample reaches the threshold.
  */
-export function findTriggerStsByThreshold(
+export function findTriggerStartByThreshold(
   values: number[],
   thresholdV: number,
 ): number {
@@ -58,13 +58,13 @@ export function findTriggerStsByThreshold(
 }
 
 /**
- * Find the Trigger PTP index using a µs-width window-peak search.
+ * Find the Trigger Peak index using a µs-width window-peak search.
  * The first index i where values[i] is the maximum over the window
  * [i - W/2, i + W/2] (clamped to array bounds) is returned. W in
  * samples is derived from peakWidthUs (µs) and the per-file dT (µs).
  * Returns -1 for empty input.
  */
-export function findTriggerPtpIndex(
+export function findTriggerPeakIndex(
   values: number[],
   peakWidthUs: number,
   dTUs: number,
@@ -80,28 +80,28 @@ export function findTriggerPtpIndex(
 }
 
 /**
- * Find the Receiver PTP index using a µs-width window-peak search,
- * restricted to the region at or after stsIndex. Same window rule
- * as findTriggerPtpIndex. Returns -1 on invalid input and falls
- * back to stsIndex at the array tail.
+ * Find the Receiver Peak index using a µs-width window-peak search,
+ * restricted to the region at or after startIndex. Same window rule
+ * as findTriggerPeakIndex. Returns -1 on invalid input and falls
+ * back to startIndex at the array tail.
  */
-export function findReceiverPtpIndex(
+export function findReceiverPeakIndex(
   values: number[],
-  stsIndex: number,
+  startIndex: number,
   peakWidthUs: number,
   dTUs: number,
 ): number {
   if (!Array.isArray(values) || values.length === 0) return -1;
-  if (stsIndex < 0 || stsIndex >= values.length) return -1;
+  if (startIndex < 0 || startIndex >= values.length) return -1;
   // At the tail there is no later sample to form a peak; fall back.
-  if (stsIndex >= values.length - 1) return stsIndex;
+  if (startIndex >= values.length - 1) return startIndex;
 
   const halfW = windowHalfSamples(peakWidthUs, dTUs);
-  for (let i = stsIndex; i < values.length; i++) {
+  for (let i = startIndex; i < values.length; i++) {
     if (isMaxInWindow(values, i, halfW)) return i;
   }
-  // No window-peak found (flat data): fall back to the STS index.
-  return stsIndex;
+  // No window-peak found (flat data): fall back to the Start index.
+  return startIndex;
 }
 
 /**
@@ -265,10 +265,10 @@ export function pickerToAnalysisResult(
 ): AnalysisResult {
   const empty: AnalysisResult = {
     fileName,
-    triggerStsTimeUs: null,
-    triggerPtpTimeUs: null,
-    receiverStsTimeUs: null,
-    receiverPtpTimeUs: null,
+    triggerStartTimeUs: null,
+    triggerPeakTimeUs: null,
+    receiverStartTimeUs: null,
+    receiverPeakTimeUs: null,
     stsDeltaTUs: null,
     ptpDeltaTUs: null,
     stsDeltaTCorrectedUs: null,
@@ -279,19 +279,19 @@ export function pickerToAnalysisResult(
   };
   // Canceled or not-yet-confirmed: no pick-dependent output.
   if (!state || state.isCanceled || !state.isConfirmed) return empty;
-  const { triggerSts, triggerPtp, receiverSts, receiverPtp } = state;
+  const { triggerStart, triggerPeak, receiverStart, receiverPeak } = state;
   // All four picks are required for a confirmed result.
-  if (!triggerSts || !triggerPtp || !receiverSts || !receiverPtp) {
+  if (!triggerStart || !triggerPeak || !receiverStart || !receiverPeak) {
     return empty;
   }
 
-  // STS_s/PTP_s come from the Trigger chart; STS_a/PTP_a from Receiver.
-  const stsStartUs = triggerSts.timeUs;
-  const stsArrivalUs = receiverSts.timeUs;
-  const ptpStartUs = triggerPtp.timeUs;
-  const ptpArrivalUs = receiverPtp.timeUs;
-  const stsDeltaTUs = stsArrivalUs - stsStartUs;
-  const ptpDeltaTUs = ptpArrivalUs - ptpStartUs;
+  // Start/Peak on Trigger chart; arrival Start/Peak on Receiver chart.
+  const triggerStartUs = triggerStart.timeUs;
+  const receiverStartUs = receiverStart.timeUs;
+  const triggerPeakUs = triggerPeak.timeUs;
+  const receiverPeakUs = receiverPeak.timeUs;
+  const stsDeltaTUs = receiverStartUs - triggerStartUs;
+  const ptpDeltaTUs = receiverPeakUs - triggerPeakUs;
 
   // Velocity is computed only when explicitly enabled; otherwise both
   // columns stay null so the CSV cells are emitted empty. The
@@ -326,10 +326,10 @@ export function pickerToAnalysisResult(
 
   return {
     fileName,
-    triggerStsTimeUs: stsStartUs,
-    triggerPtpTimeUs: ptpStartUs,
-    receiverStsTimeUs: stsArrivalUs,
-    receiverPtpTimeUs: ptpArrivalUs,
+    triggerStartTimeUs: triggerStartUs,
+    triggerPeakTimeUs: triggerPeakUs,
+    receiverStartTimeUs: receiverStartUs,
+    receiverPeakTimeUs: receiverPeakUs,
     // Delta-T in µs: receiver time minus trigger time for STS and PTP.
     stsDeltaTUs,
     ptpDeltaTUs,

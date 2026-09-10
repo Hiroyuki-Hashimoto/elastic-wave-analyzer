@@ -11,10 +11,11 @@ identifying wave travel times from time-domain signals.
 The interface renders Trigger (transmitter) and Receiver traces from
 oscilloscope CSV exports on a shared microsecond time axis, with
 adjustable amplitude gain, offset correction, time trimming, manual
-or automatic Start-to-Start (STS) / Peak-to-Peak (PTP) picking,
+or automatic Start/Peak picking with Start-to-Start (STS) /
+Peak-to-Peak (PTP) travel times,
 previous-waveform overlay, and wave velocity calculation.
 
-オシロスコープから書き出した CSV の Trigger (送信側) と Receiver (受信側) の波形を、共通のマイクロ秒軸に並べて表示します。振幅ゲイン・オフセット補正・時間範囲のトリミング、手動/自動の立ち上がり (Start-to-Start法)・ピーク (Peak-to-Peak法) 読み取り、前回波形のオーバーレイ、弾性波速度の算出が可能です。
+オシロスコープから書き出した CSV の Trigger (送信側) と Receiver (受信側) の波形を、共通のマイクロ秒軸に並べて表示します。振幅ゲイン・オフセット補正・時間範囲のトリミング、手動/自動の Start/Peak 読み取りと Start-to-Start (STS) / Peak-to-Peak (PTP) 伝播時間、前回波形のオーバーレイ、弾性波速度の算出が可能です。
 
 ## Web app
 
@@ -40,9 +41,9 @@ Chromium 系のブラウザ (**Chrome**, **Edge**, **Opera**) で、フル HD (1
 | Display settings | Amplitude gain, offset correction, time trimming, zoom with per-chart pan scrollbars. |
 | Low pass filter | Zero-phase Butterworth low-pass filter on the Receiver trace with adjustable cutoff (kHz). |
 | Batch queue | Load multiple CSVs and determine wave travel time in sequence. |
-| Manual picking | Left click sets the STS point (PTP auto-derived); right click overrides the PTP. |
-| Trigger auto-detection | Threshold-based automatic Trigger STS pick with derived PTP. |
-| CC receiver picking | Receiver STS estimated by cross-correlating against the last confirmed file inside a Before/After window; PTP derived from it. |
+| Manual picking | Left click sets the Start point (Peak auto-derived); right click overrides the Peak. |
+| Trigger auto-detection | Threshold-based automatic Trigger Start pick with derived Peak. |
+| CC receiver picking | Receiver Start estimated by cross-correlating against the last confirmed file inside a Before/After window; Peak derived from it. |
 | Previous-waveform overlay | Faded reference traces, dashed pick guides, and Δ annotations versus the live picks. |
 | Wave velocity | Propagation times with system-delay correction and distance-based wave velocity. |
 | Results & export | Per-file results table, results CSV download, PNG chart export with auto-save on confirm. |

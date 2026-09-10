@@ -9,16 +9,16 @@ export type ExportInput = {
 /** Exact column order of the exported CSV header. */
 export const RESULTS_CSV_HEADER = [
   "File_Name",
-  "Trig_STS_time(us)",
-  "Trig_PTP_time(us)",
-  "Rec_STS_time(us)",
-  "Rec_PTP_time(us)",
-  "STS_deltaT(us)",
-  "PTP_deltaT(us)",
-  "STS_deltaT_corrected(us)",
-  "PTP_deltaT_corrected(us)",
-  "STS_velocity(m/s)",
-  "PTP_velocity(m/s)",
+  "Trig_Start(us)",
+  "Trig_Peak(us)",
+  "Rec_Start(us)",
+  "Rec_Peak(us)",
+  "deltaT_STS(us)",
+  "deltaT_PTP(us)",
+  "deltaT_STS_corrected(us)",
+  "deltaT_PTP_corrected(us)",
+  "velocity_STS(m/s)",
+  "velocity_PTP(m/s)",
   "Distance(mm)",
 ] as const;
 
@@ -62,10 +62,10 @@ export function formatAnalysisResultCells(
   }
   return [
     escapeCsvField(r.fileName),
-    formatNumberCell(r.triggerStsTimeUs, TIME_DECIMALS),
-    formatNumberCell(r.triggerPtpTimeUs, TIME_DECIMALS),
-    formatNumberCell(r.receiverStsTimeUs, TIME_DECIMALS),
-    formatNumberCell(r.receiverPtpTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.triggerStartTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.triggerPeakTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.receiverStartTimeUs, TIME_DECIMALS),
+    formatNumberCell(r.receiverPeakTimeUs, TIME_DECIMALS),
     formatNumberCell(r.stsDeltaTUs, TIME_DECIMALS),
     formatNumberCell(r.ptpDeltaTUs, TIME_DECIMALS),
     formatNumberCell(r.stsDeltaTCorrectedUs, TIME_DECIMALS),
@@ -232,7 +232,7 @@ export async function savePngToDirectory(
  * Export the current chart as a PNG. Combines the two uPlot canvases
  * (Trigger on top, Receiver on bottom) into one PNG so the saved
  * image matches what the user sees on screen, including the axes,
- * grid, and any STS/PTP marker overlays drawn via the chart's
+ * grid, and any Start/Peak marker overlays drawn via the chart's
  * hooks.draw callback.
  *
  * When `directoryHandle` is provided, the PNG is written straight to

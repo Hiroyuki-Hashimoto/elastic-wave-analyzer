@@ -16,9 +16,9 @@ import {
   crossCorrelateDeltaUs,
   emptyPickerState,
   findNearestSampleIndex,
-  findReceiverPtpIndex,
-  findTriggerPtpIndex,
-  findTriggerStsByThreshold,
+  findReceiverPeakIndex,
+  findTriggerPeakIndex,
+  findTriggerStartByThreshold,
   pickerToAnalysisResult,
 } from "./lib/picker";
 import {
@@ -139,7 +139,7 @@ export default function App() {
       : DEFAULT_DISPLAY_SETTINGS,
   );
   const [errors, setErrors] = useState<string[]>([]);
-  // Picker state holds the four STS/PTP picks for the current file;
+  // Picker state holds the four Start/Peak picks for the current file;
   // replacing a pick on an axis only overwrites that axis/kind slot.
   const [picker, setPicker] = useState<PickerState>(emptyPickerState());
   // One result per Enter-confirm or Escape-cancel; consumed by the
@@ -343,8 +343,8 @@ export default function App() {
     saveStoredAutoDownloadPng(autoDownloadPng);
   }, [autoDownloadPng]);
 
-  // Trigger auto-detection: while armed, derive the Trigger STS pick from
-  // the first displayed sample at/above the threshold and derive PTP with
+  // Trigger auto-detection: while armed, derive the Trigger Start pick from
+  // the first displayed sample at/above the threshold and derive Peak with
   // the same window-peak search a manual left click uses. chartDisplay
   // already rebuilds on gain / offset / trim / file changes, so listing it
   // as a dependency re-runs detection on every relevant settings change.
@@ -356,38 +356,38 @@ export default function App() {
 
     const time = chartDisplay.timeUs;
     const values = chartDisplay.transmitterV;
-    const stsIdx = findTriggerStsByThreshold(
+    const startIdx = findTriggerStartByThreshold(
       values,
       settings.triggerThresholdV,
     );
-    if (stsIdx === -1) {
+    if (startIdx === -1) {
       // Armed but never crossed: clear stale trigger picks so the axis
       // stays fully automatic, and say why no marker appeared.
-      setPicker((prev) => ({ ...prev, triggerSts: null, triggerPtp: null }));
+      setPicker((prev) => ({ ...prev, triggerStart: null, triggerPeak: null }));
       addNotice(
         "warning",
         `Trigger auto-detect: threshold ${settings.triggerThresholdV} V not reached.`,
       );
       return;
     }
-    // PTP mirrors a manual left click: window-peak search over the trace.
-    const ptpIdx = findTriggerPtpIndex(values, settings.peakWidthUs, dTUs);
+    // Peak mirrors a manual left click: window-peak search over the trace.
+    const peakIdx = findTriggerPeakIndex(values, settings.peakWidthUs, dTUs);
     setPicker((prev) => ({
       ...prev,
       isConfirmed: false,
-      triggerSts: {
+      triggerStart: {
         axis: "trigger",
-        kind: "sts",
-        index: stsIdx,
-        timeUs: time[stsIdx],
-        voltage: values[stsIdx],
+        kind: "start",
+        index: startIdx,
+        timeUs: time[startIdx],
+        voltage: values[startIdx],
       },
-      triggerPtp: {
+      triggerPeak: {
         axis: "trigger",
-        kind: "ptp",
-        index: ptpIdx,
-        timeUs: time[ptpIdx],
-        voltage: values[ptpIdx],
+        kind: "peak",
+        index: peakIdx,
+        timeUs: time[peakIdx],
+        voltage: values[peakIdx],
       },
     }));
   }, [
@@ -400,17 +400,17 @@ export default function App() {
   ]);
 
   // CC receiver auto-picking: while armed with a reference snapshot,
-  // cross-correlate the live Receiver around the previous STS pick to
-  // find the time shift, snap an STS pick at (previous STS + delta) and
-  // derive PTP from it with the same window-peak search a manual left
+  // cross-correlate the live Receiver around the previous Start pick to
+  // find the time shift, snap a Start pick at (previous Start + delta) and
+  // derive Peak from it with the same window-peak search a manual left
   // click uses. Re-runs on every relevant change like the trigger
   // detector, so manual receiver edits are overwritten while armed.
   useEffect(() => {
     // Disarmed / no reference snapshot yet (first file): silently skip.
     if (!settings.ccEnabled || !prevOverlay || !chartDisplay) return;
     if (chartDisplay.timeUs.length === 0 || dTUs === null) return;
-    const prevSts = prevOverlay.picks.receiverSts;
-    if (!prevSts) return;
+    const prevStart = prevOverlay.picks.receiverStart;
+    if (!prevStart) return;
 
     const time = chartDisplay.timeUs;
     const values = chartDisplay.receiverV;
@@ -419,7 +419,7 @@ export default function App() {
       values,
       prevOverlay.display.timeUs,
       prevOverlay.display.receiverV,
-      prevSts.timeUs,
+      prevStart.timeUs,
       settings.ccBeforeUs,
       settings.ccAfterUs,
       dTUs,
@@ -429,8 +429,8 @@ export default function App() {
       // clearing stale picks, and say why nothing was placed.
       setPicker((prev) => ({
         ...prev,
-        receiverSts: null,
-        receiverPtp: null,
+        receiverStart: null,
+        receiverPeak: null,
       }));
       addNotice(
         "warning",
@@ -439,31 +439,31 @@ export default function App() {
       return;
     }
 
-    // Estimated arrival: reference STS shifted by the correlation lag.
-    const estStsUs = prevSts.timeUs + deltaUs;
-    const stsIdx = findNearestSampleIndex(time, estStsUs);
-    const ptpIdx = findReceiverPtpIndex(
+    // Estimated arrival: reference Start shifted by the correlation lag.
+    const estStartUs = prevStart.timeUs + deltaUs;
+    const startIdx = findNearestSampleIndex(time, estStartUs);
+    const peakIdx = findReceiverPeakIndex(
       values,
-      stsIdx,
+      startIdx,
       settings.peakWidthUs,
       dTUs,
     );
     setPicker((prev) => ({
       ...prev,
       isConfirmed: false,
-      receiverSts: {
+      receiverStart: {
         axis: "receiver",
-        kind: "sts",
-        index: stsIdx,
-        timeUs: time[stsIdx],
-        voltage: values[stsIdx],
+        kind: "start",
+        index: startIdx,
+        timeUs: time[startIdx],
+        voltage: values[startIdx],
       },
-      receiverPtp: {
+      receiverPeak: {
         axis: "receiver",
-        kind: "ptp",
-        index: ptpIdx,
-        timeUs: time[ptpIdx],
-        voltage: values[ptpIdx],
+        kind: "peak",
+        index: peakIdx,
+        timeUs: time[peakIdx],
+        voltage: values[peakIdx],
       },
     }));
   }, [
@@ -1047,7 +1047,7 @@ export default function App() {
   }, [handleFiles]);
 
   /**
-   * Receive a STS/PTP click from the chart. Replacing a pick on an axis
+   * Receive a Start/Peak click from the chart. Replacing a pick on an axis
    * only overwrites that axis/kind slot; the other three picks persist.
    */
   const handlePick = (
@@ -1057,14 +1057,14 @@ export default function App() {
   ) => {
     setPicker((prev) => {
       const next: PickerState = { ...prev, isConfirmed: false };
-      if (point.axis === "trigger" && point.kind === "sts") {
-        next.triggerSts = point;
-      } else if (point.axis === "trigger" && point.kind === "ptp") {
-        next.triggerPtp = point;
-      } else if (point.axis === "receiver" && point.kind === "sts") {
-        next.receiverSts = point;
-      } else if (point.axis === "receiver" && point.kind === "ptp") {
-        next.receiverPtp = point;
+      if (point.axis === "trigger" && point.kind === "start") {
+        next.triggerStart = point;
+      } else if (point.axis === "trigger" && point.kind === "peak") {
+        next.triggerPeak = point;
+      } else if (point.axis === "receiver" && point.kind === "start") {
+        next.receiverStart = point;
+      } else if (point.axis === "receiver" && point.kind === "peak") {
+        next.receiverPeak = point;
       }
       return next;
     });
@@ -1226,10 +1226,10 @@ export default function App() {
   const handleAdvance = useCallback(() => {
     if (!currentRaw) return;
     const allPicks =
-      picker.triggerSts &&
-      picker.triggerPtp &&
-      picker.receiverSts &&
-      picker.receiverPtp;
+      picker.triggerStart &&
+      picker.triggerPeak &&
+      picker.receiverStart &&
+      picker.receiverPeak;
     if (!allPicks) {
       addNotice(
         "warning",
@@ -1266,25 +1266,25 @@ export default function App() {
     // Freeze the just-confirmed display and its picks as the
     // reference overlay for the following files; skip never touches this.
     const {
-      triggerSts,
-      triggerPtp,
-      receiverSts,
-      receiverPtp,
+      triggerStart,
+      triggerPeak,
+      receiverStart,
+      receiverPeak,
     } = picker;
     if (
       goodDisplayRef.current &&
-      triggerSts &&
-      triggerPtp &&
-      receiverSts &&
-      receiverPtp
+      triggerStart &&
+      triggerPeak &&
+      receiverStart &&
+      receiverPeak
     ) {
       setPrevOverlay({
         display: goodDisplayRef.current,
         picks: {
-          triggerSts,
-          triggerPtp,
-          receiverSts,
-          receiverPtp,
+          triggerStart,
+          triggerPeak,
+          receiverStart,
+          receiverPeak,
           isConfirmed: false,
           isCanceled: false,
         },
@@ -1702,8 +1702,8 @@ function buildConfirmMessage(
   }
   let msg =
     `Analysis confirmed for ${fileName}. ` +
-    `STS_deltaT=${result.stsDeltaTUs.toFixed(1)} us, ` +
-    `PTP_deltaT=${result.ptpDeltaTUs.toFixed(1)} us.`;
+    `deltaT_STS=${result.stsDeltaTUs.toFixed(1)} us, ` +
+    `deltaT_PTP=${result.ptpDeltaTUs.toFixed(1)} us.`;
   if (result.stsVelocityMps !== null || result.ptpVelocityMps !== null) {
     const sts = result.stsVelocityMps !== null
       ? result.stsVelocityMps.toFixed(1)
@@ -1711,7 +1711,7 @@ function buildConfirmMessage(
     const ptp = result.ptpVelocityMps !== null
       ? result.ptpVelocityMps.toFixed(1)
       : "-";
-    msg += ` STS_vel=${sts} m/s, PTP_vel=${ptp} m/s.`;
+    msg += ` velocity_STS=${sts} m/s, velocity_PTP=${ptp} m/s.`;
   }
   return msg;
 }

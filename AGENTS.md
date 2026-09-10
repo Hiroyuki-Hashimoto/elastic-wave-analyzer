@@ -15,7 +15,7 @@
 - Maintain the four-module boundary:
   - src/lib/importer.ts: input-format detection, column mapping, unit normalization, file reading
   - src/lib/waveform.ts: raw waveform validation, resampling, gain, offset, trim
-  - src/lib/picker.ts: STS/PTP picking and related calculations
+  - src/lib/picker.ts: Start/Peak picking and STS/PTP calculations
   - src/lib/exporter.ts: CSV and PNG export
 
 ## Code comment rules

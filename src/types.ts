@@ -64,7 +64,7 @@ export type DisplaySettings = {
   trimEnabled: boolean;
   trimStartUs: number;
   trimEndUs: number;
-  /** Half-width of the search window for PTP peak detection, in µs. */
+  /** Half-width of the search window for Peak detection, in µs. */
   peakWidthUs: number;
   /**
    * When true, the last confirmed file's Trigger/Receiver traces are
@@ -72,19 +72,19 @@ export type DisplaySettings = {
    */
   overlayPrevEnabled: boolean;
   /**
-   * When true, the Receiver STS pick (and PTP derived from it) is
+   * When true, the Receiver Start pick (and Peak derived from it) is
    * estimated by cross-correlating the live Receiver trace against the
-   * reference one inside a window around the previous STS pick.
+   * reference one inside a window around the previous Start pick.
    */
   ccEnabled: boolean;
-  /** Correlation window reach BEFORE the previous Receiver STS, in µs. */
+  /** Correlation window reach BEFORE the previous Receiver Start, in µs. */
   ccBeforeUs: number;
-  /** Correlation window reach AFTER the previous Receiver STS, in µs. */
+  /** Correlation window reach AFTER the previous Receiver Start, in µs. */
   ccAfterUs: number;
-  /** When true, Trigger STS/PTP picks are derived automatically (see below). */
+  /** When true, Trigger Start/Peak picks are derived automatically (see below). */
   triggerAutoEnabled: boolean;
   /**
-   * Crossing level for automatic Trigger STS detection, compared against
+   * Crossing level for automatic Trigger Start detection, compared against
    * the displayed Transmitter voltage (after offset correction and gain).
    */
   triggerThresholdV: number;
@@ -116,13 +116,13 @@ export type DisplayWaveform = {
   receiverV: number[];
 };
 
-/** Per-file STS/PTP picks and delta-T results (null until picked). */
+/** Per-file Start/Peak picks and STS/PTP delta-T results (null until picked). */
 export type AnalysisResult = {
   fileName: string;
-  triggerStsTimeUs: number | null;
-  triggerPtpTimeUs: number | null;
-  receiverStsTimeUs: number | null;
-  receiverPtpTimeUs: number | null;
+  triggerStartTimeUs: number | null;
+  triggerPeakTimeUs: number | null;
+  receiverStartTimeUs: number | null;
+  receiverPeakTimeUs: number | null;
   /** Receiver minus Trigger pick time for STS, in µs. */
   stsDeltaTUs: number | null;
   ptpDeltaTUs: number | null;
@@ -140,8 +140,8 @@ export type AnalysisResult = {
 /** Which chart a pick belongs to: upper Trigger or lower Receiver. */
 export type PickAxis = "trigger" | "receiver";
 
-/** Which kind of pick: STS (start) or PTP (peak/arrival). */
-export type PickKind = "sts" | "ptp";
+/** Which kind of pick: Start (onset) or Peak (peak/arrival). */
+export type PickKind = "start" | "peak";
 
 /** One snapped user pick with axis/kind metadata and sample coordinates. */
 export type PickPoint = {
@@ -154,10 +154,10 @@ export type PickPoint = {
 
 /** All four picks for a single file plus confirm/cancel flags. */
 export type PickerState = {
-  triggerSts: PickPoint | null;
-  triggerPtp: PickPoint | null;
-  receiverSts: PickPoint | null;
-  receiverPtp: PickPoint | null;
+  triggerStart: PickPoint | null;
+  triggerPeak: PickPoint | null;
+  receiverStart: PickPoint | null;
+  receiverPeak: PickPoint | null;
   isConfirmed: boolean;
   isCanceled: boolean;
 };
@@ -194,7 +194,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   trimEnabled: false,
   trimStartUs: -50,
   trimEndUs: 800,
-  // PTP peak detection window half-width. ~10 kHz, so one full cycle
+  // Peak detection window half-width. ~10 kHz, so one full cycle
   // is ~100 µs and the half-period is ~50 µs. Adjustable in Settings.
   peakWidthUs: 50,
   // Previous-waveform overlay starts off; it only has content after

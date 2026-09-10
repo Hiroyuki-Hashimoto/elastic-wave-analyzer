@@ -225,7 +225,7 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
         </div>
 
         {/* Trigger auto-detection: when armed, App re-derives the Trigger
-            STS/PTP picks from the threshold crossing. */}
+            Start/Peak picks from the threshold crossing. */}
         <div
           className={`settings-inline-card${
             settings.triggerAutoEnabled ? " is-on" : ""
@@ -260,7 +260,7 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
         </div>
 
         {/* Cross-correlation receiver picking: estimates the Receiver
-            STS around the previous confirmed pick inside the
+            Start around the previous confirmed pick inside the
             Before/After window. */}
         <div
           className={`settings-inline-card${
@@ -288,7 +288,7 @@ export default function SettingsPanel({ settings, onSettingsChange }: Props) {
               onChange={(e) => {
                 const v = Number(e.target.value);
                 // Negative or non-finite reach collapses to 0 so the
-                // window stays well-defined around the previous STS.
+                // window stays well-defined around the previous Start.
                 update({ ccBeforeUs: Number.isFinite(v) && v >= 0 ? v : 0 });
               }}
             />

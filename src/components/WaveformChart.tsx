@@ -9,8 +9,8 @@ import {
 import UPlot from "uplot";
 import {
   findNearestSampleIndex,
-  findReceiverPtpIndex,
-  findTriggerPtpIndex,
+  findReceiverPeakIndex,
+  findTriggerPeakIndex,
 } from "../lib/picker";
 import { resampleOnto } from "../lib/waveform";
 import { ZOOM_PERCENTAGES, type PrevOverlay } from "../types";
@@ -48,7 +48,7 @@ type Props = {
   display: DisplayWaveform | null;
   picker: PickerState;
   onPick: (axis: PickAxis, kind: PickKind, point: PickPoint) => void;
-  /** Half-width of the PTP peak search window, in µs. */
+  /** Half-width of the Peak search window, in µs. */
   peakWidthUs: number;
   /** Sample interval of the displayed waveform, in µs. */
   dTUs: number;
@@ -80,7 +80,7 @@ export type WaveformChartHandle = {
 /**
  * Render the Trigger (top) and Receiver (bottom) waveforms as two
  * uPlot instances sharing a single numeric microsecond x-axis, with
- * left/right mouse interaction for STS/PTP picking. uPlot instances
+ * left/right mouse interaction for Start/Peak picking. uPlot instances
  * are destroyed on unmount and before each rebuild; click and context
  * listeners are removed on the same lifecycle to avoid leaks.
  */
@@ -213,21 +213,21 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     ];
 
     const triggerMarkers = {
-      sts: picker.triggerSts,
-      ptp: picker.triggerPtp,
+      start: picker.triggerStart,
+      peak: picker.triggerPeak,
       // Reference pick times drive dashed guides and Δ label lines.
-      prevStsTimeUs:
-        hasPrev ? prevOverlay!.picks.triggerSts?.timeUs ?? null : null,
-      prevPtpTimeUs:
-        hasPrev ? prevOverlay!.picks.triggerPtp?.timeUs ?? null : null,
+      prevStartTimeUs:
+        hasPrev ? prevOverlay!.picks.triggerStart?.timeUs ?? null : null,
+      prevPeakTimeUs:
+        hasPrev ? prevOverlay!.picks.triggerPeak?.timeUs ?? null : null,
     };
     const receiverMarkers = {
-      sts: picker.receiverSts,
-      ptp: picker.receiverPtp,
-      prevStsTimeUs:
-        hasPrev ? prevOverlay!.picks.receiverSts?.timeUs ?? null : null,
-      prevPtpTimeUs:
-        hasPrev ? prevOverlay!.picks.receiverPtp?.timeUs ?? null : null,
+      start: picker.receiverStart,
+      peak: picker.receiverPeak,
+      prevStartTimeUs:
+        hasPrev ? prevOverlay!.picks.receiverStart?.timeUs ?? null : null,
+      prevPeakTimeUs:
+        hasPrev ? prevOverlay!.picks.receiverPeak?.timeUs ?? null : null,
     };
 
     // Hosts are flex-sized by CSS; read their real pixel heights so the
@@ -343,7 +343,7 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
 
   /**
    * Attach mousedown + contextmenu listeners to the uPlot overlay div
-   * so left clicks pick STS, right clicks pick PTP, and right-click
+   * so left clicks pick Start, right clicks pick Peak, and right-click
    * inside the chart never opens the browser context menu. Listeners
    * are stored on the plot instance via closure cleanup is implicit on
    * destroy since the host DOM (u.over) is removed.
@@ -356,17 +356,17 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
     over.addEventListener("contextmenu", onContext);
 
     over.addEventListener("mousedown", (e: MouseEvent) => {
-      // Left button = STS, right button = PTP; ignore middle/other buttons.
+      // Left button = Start, right button = Peak; ignore middle/other buttons.
       if (e.button !== 0 && e.button !== 2) return;
-      const kind: PickKind = e.button === 2 ? "ptp" : "sts";
+      const kind: PickKind = e.button === 2 ? "peak" : "start";
       handlePickClick(axis, kind, plot, e);
     });
   }
 
   /**
    * Convert a mouse click into snapped PickPoint(s) and forward them
-   * to App via onPick. A left-click sets STS AND auto-derives the PTP
-   * for the same axis; a right-click forces the PTP to the clicked
+   * to App via onPick. A left-click sets Start AND auto-derives the Peak
+   * for the same axis; a right-click forces the Peak to the clicked
    * sample so the user can override the automatic peak detection on
    * noisy data.
    */
@@ -401,22 +401,22 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
       });
     };
 
-    if (kind === "sts") {
-      // Left-click: snap STS to nearest sample, then auto-derive PTP.
-      const stsIdx = findNearestSampleIndex(time, dataX);
-      emit(stsIdx, "sts");
-      // PTP uses the µs-width window peak with the current sample dT.
+    if (kind === "start") {
+      // Left-click: snap Start to nearest sample, then auto-derive Peak.
+      const startIdx = findNearestSampleIndex(time, dataX);
+      emit(startIdx, "start");
+      // Peak uses the µs-width window peak with the current sample dT.
       if (axis === "trigger") {
-        emit(findTriggerPtpIndex(values, peakWidthUsRef.current, dTUsRef.current), "ptp");
+        emit(findTriggerPeakIndex(values, peakWidthUsRef.current, dTUsRef.current), "peak");
       } else {
-        emit(findReceiverPtpIndex(values, stsIdx, peakWidthUsRef.current, dTUsRef.current), "ptp");
+        emit(findReceiverPeakIndex(values, startIdx, peakWidthUsRef.current, dTUsRef.current), "peak");
       }
     } else {
-      // Right-click: force the PTP to the click's nearest sample. This
+      // Right-click: force the Peak to the click's nearest sample. This
       // lets the user override the automatic window-peak detection on
       // noisy data where the algorithm's choice is wrong.
-      const ptpIdx = findNearestSampleIndex(time, dataX);
-      emit(ptpIdx, "ptp");
+      const peakIdx = findNearestSampleIndex(time, dataX);
+      emit(peakIdx, "peak");
     }
   }
 
@@ -498,11 +498,11 @@ const WaveformChart = forwardRef<WaveformChartHandle, Props>(function WaveformCh
 export default WaveformChart;
 
 type ChartMarkers = {
-  sts: PickPoint | null;
-  ptp: PickPoint | null;
+  start: PickPoint | null;
+  peak: PickPoint | null;
   /** Reference-run pick times driving dashed guides and Δ label lines. */
-  prevStsTimeUs: number | null;
-  prevPtpTimeUs: number | null;
+  prevStartTimeUs: number | null;
+  prevPeakTimeUs: number | null;
 };
 
 type ChartScrollbarProps = {
@@ -562,7 +562,7 @@ function windowFor(
 /**
  * Build a uPlot options object for one chart with a numeric microsecond
  * x-axis and an auto-padded y-axis fitted to the given values. The
- * draw hook paints STS (red) and PTP (green) vertical markers plus
+ * draw hook paints Start (red) and Peak (green) vertical markers plus
  * time annotations directly on the uPlot series canvas so they appear
  * in the chart and survive PNG export later.
  */
@@ -683,7 +683,7 @@ function buildOptions(
 
 /**
  * Draw faint dashed vertical guides at the reference run's pick times
- * first (overlay only), then the live STS (red) and PTP (green) marker
+ * first (overlay only), then the live Start (red) and Peak (green) marker
  * lines with time labels beside them. When a reference pick exists for
  * a slot, its label gains a third "(Δ x.x µs)" line reporting how far
  * the live pick sits from the reference one — mirroring the Python
@@ -691,10 +691,10 @@ function buildOptions(
  */
 function drawMarkers(u: UPlot, markers: ChartMarkers) {
   const hasAny =
-    markers.sts ||
-    markers.ptp ||
-    markers.prevStsTimeUs != null ||
-    markers.prevPtpTimeUs != null;
+    markers.start ||
+    markers.peak ||
+    markers.prevStartTimeUs != null ||
+    markers.prevPeakTimeUs != null;
   if (!hasAny) return;
   const ctx = u.ctx;
   // bbox is the plot drawing area in canvas pixels.
@@ -715,19 +715,19 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
   // dotted so it cannot be mistaken for a live pick; drawn before the
   // live elements so they read as background guides.
   ctx.setLineDash([4, 4]);
-  if (markers.prevStsTimeUs != null) {
-    // Faded red, matching the live STS line (#d62728).
+  if (markers.prevStartTimeUs != null) {
+    // Faded red, matching the live Start line (#d62728).
     ctx.strokeStyle = "rgba(214, 39, 40, 0.35)";
-    const x = u.valToPos(markers.prevStsTimeUs, "time-us", true);
+    const x = u.valToPos(markers.prevStartTimeUs, "time-us", true);
     ctx.beginPath();
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
     ctx.stroke();
   }
-  if (markers.prevPtpTimeUs != null) {
-    // Faded green, matching the live PTP line (#2ca02c).
+  if (markers.prevPeakTimeUs != null) {
+    // Faded green, matching the live Peak line (#2ca02c).
     ctx.strokeStyle = "rgba(44, 160, 44, 0.35)";
-    const x = u.valToPos(markers.prevPtpTimeUs, "time-us", true);
+    const x = u.valToPos(markers.prevPeakTimeUs, "time-us", true);
     ctx.beginPath();
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
@@ -764,37 +764,37 @@ function drawMarkers(u: UPlot, markers: ChartMarkers) {
     }
   }
 
-  // STS marker: red vertical line with its label stack pinned near the
+  // Start marker: red vertical line with its label stack pinned near the
   // top of the plot.
-  if (markers.sts) {
-    const x = u.valToPos(markers.sts.timeUs, "time-us", true);
+  if (markers.start) {
+    const x = u.valToPos(markers.start.timeUs, "time-us", true);
     ctx.strokeStyle = "#d62728";
     ctx.beginPath();
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
     ctx.stroke();
     ctx.fillStyle = "#d62728";
-    const lines = ["STS", `${formatPick(markers.sts)} µs`];
-    if (markers.prevStsTimeUs != null) {
-      const d = markers.sts.timeUs - markers.prevStsTimeUs;
+    const lines = ["Start", `${formatPick(markers.start)} µs`];
+    if (markers.prevStartTimeUs != null) {
+      const d = markers.start.timeUs - markers.prevStartTimeUs;
       lines.push(`(Δ ${fmtDelta(d)} µs)`);
     }
     drawLabelStack(x, top + 4, lines);
   }
-  // PTP marker: green vertical line whose label stack is anchored to
+  // Peak marker: green vertical line whose label stack is anchored to
   // the plot's bottom edge (6 px inset). A Δ line grows the stack
   // upward, so the bottom edge stays pinned regardless of line count.
-  if (markers.ptp) {
-    const x = u.valToPos(markers.ptp.timeUs, "time-us", true);
+  if (markers.peak) {
+    const x = u.valToPos(markers.peak.timeUs, "time-us", true);
     ctx.strokeStyle = "#2ca02c";
     ctx.beginPath();
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
     ctx.stroke();
     ctx.fillStyle = "#2ca02c";
-    const lines = ["PTP", `${formatPick(markers.ptp)} µs`];
-    if (markers.prevPtpTimeUs != null) {
-      const d = markers.ptp.timeUs - markers.prevPtpTimeUs;
+    const lines = ["Peak", `${formatPick(markers.peak)} µs`];
+    if (markers.prevPeakTimeUs != null) {
+      const d = markers.peak.timeUs - markers.prevPeakTimeUs;
       lines.push(`(Δ ${fmtDelta(d)} µs)`);
     }
     drawLabelStack(x, bottom - 6 - lines.length * LINE_H, lines);
