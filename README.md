@@ -46,6 +46,7 @@ Chromium 系のブラウザ (**Chrome**, **Edge**, **Opera**) で、フル HD (1
 | Previous-waveform overlay | Faded reference traces, dashed pick guides, and Δ annotations versus the live picks. |
 | Wave velocity | Propagation times with system-delay correction and distance-based wave velocity. |
 | Results & export | Per-file results table, results CSV download, PNG chart export with auto-save on confirm. |
+| Offline & installable | Service-worker precache for fully offline use; installable as a standalone app with an in-app Reload prompt on updates. |
 
 | 機能 | 説明 |
 | --- | --- |
@@ -61,6 +62,7 @@ Chromium 系のブラウザ (**Chrome**, **Edge**, **Opera**) で、フル HD (1
 | 前回波形のオーバーレイ | 半透明の参照波形、破線のピッキングガイド、現在値との Δ 注記を表示。 |
 | 弾性波速度 | システム遅延補正付きの到達時間から、距離ベースの弾性波速度を算出。 |
 | 結果とエクスポート | ファイル単位の結果表、結果 CSV のダウンロード、PNG チャート出力 (確認時の自動保存)。 |
+| オフラインとインストール | Service Worker の precache により完全オフラインで動作。スタンドアロンアプリとしてインストール可能で、更新時はアプリ内 Reload 通知。 |
 
 ## License
 
