@@ -3,6 +3,7 @@ import ImportsExportsPanel from "./components/ImportsExportsPanel";
 import ImportMappingDialog, {
   type MappingRequest,
 } from "./components/ImportMappingDialog";
+import InputFolderDialog from "./components/InputFolderDialog";
 import NotificationsErrorsPanel from "./components/NotificationsErrorsPanel";
 import ResultsTable, { type ResultRow } from "./components/ResultsTable";
 import SettingsPanel from "./components/SettingsPanel";
@@ -25,7 +26,6 @@ import {
 } from "./lib/lpf";
 import {
   guessImportSpec,
-  listDataFilesInDirectory,
   matchesMemoHeader,
   matchesRememberedSpec,
   parseWithSpec,
@@ -168,6 +168,13 @@ export default function App() {
   const pendingGroupsRef = useRef<PendingGroup[]>([]);
   const groupTotalRef = useRef(0);
   const queuePrefixRef = useRef<QueueEntry[]>([]);
+  // Folder picked from the webkitdirectory input but not yet loaded:
+  // the dialog shows the contained file list with a live keyword
+  // filter, and Load hands the filtered list to handleFiles.
+  const [pendingFolder, setPendingFolder] = useState<{
+    folderName: string;
+    files: File[];
+  } | null>(null);
 
   // The current entry is the single 'current' row in the queue, or null.
   const currentEntry = useMemo(
@@ -733,54 +740,53 @@ export default function App() {
   }, [mappingMemo]);
 
   /**
-   * Open the system directory picker and feed every supported file
-   * found in (or one level under) the chosen folder into the regular
-   * load pipeline. Uses the File System Access API exclusively; the
-   * caller surfaces an error notice when the browser lacks support.
+   * Receive the FileList the webkitdirectory input produced and open
+   * the filter dialog so the user can review the contained files and
+   * narrow the load down by keyword before committing. The dialog
+   * hands the filtered list back via `handleConfirmFolderLoad` (which
+   * funnels into `handleFiles`); Cancel simply discards.
    */
-  const handleSelectInputFolder = useCallback(async () => {
-    if (typeof window.showDirectoryPicker !== "function") {
+  const handleSelectInputFolder = useCallback(
+    (files: File[], folderName: string) => {
+      // webkitdirectory yields every file under the folder, including
+      // ones outside our supported extensions; the dialog's "0 of N"
+      // counter is enough to show that, so we pass the full list and
+      // let the dialog's keyword filter do the narrowing.
+      if (files.length === 0) {
+        addNotice(
+          "warning",
+          `No files found in ${folderName}.`,
+        );
+        return;
+      }
+      setPendingFolder({ folderName, files });
+    },
+    [addNotice],
+  );
+
+  /**
+   * User accepted the folder dialog: pipe the (already filtered) file
+   * list into the regular load pipeline. The mapping dialog flow
+   * downstream will handle any format-group confirmation just like a
+   * drag-and-drop would.
+   */
+  const handleConfirmFolderLoad = useCallback(
+    (filteredFiles: File[]) => {
+      setPendingFolder(null);
+      if (filteredFiles.length === 0) return;
       addNotice(
-        "error",
-        "Folder selection requires a browser with the File System Access API (Chrome/Edge/Opera).",
+        "info",
+        `Loading ${filteredFiles.length} file(s) from folder.`,
       );
-      return;
-    }
-    let dirHandle: FileSystemDirectoryHandle;
-    try {
-      dirHandle = await window.showDirectoryPicker({ mode: "read" });
-    } catch (e) {
-      // User dismissed the picker: stay silent, no error to surface.
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      addNotice(
-        "error",
-        `Folder selection failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-      return;
-    }
-    let files: File[];
-    try {
-      files = await listDataFilesInDirectory(dirHandle);
-    } catch (e) {
-      addNotice(
-        "error",
-        `Failed to read folder: ${e instanceof Error ? e.message : String(e)}`,
-      );
-      return;
-    }
-    if (files.length === 0) {
-      addNotice(
-        "warning",
-        `No .csv/.tsv/.txt files found in ${dirHandle.name}.`,
-      );
-      return;
-    }
-    addNotice(
-      "info",
-      `Reading ${files.length} file(s) from folder ${dirHandle.name} in name order.`,
-    );
-    void handleFiles(files);
-  }, [addNotice, handleFiles]);
+      void handleFiles(filteredFiles);
+    },
+    [addNotice, handleFiles],
+  );
+
+  /** User cancelled the folder dialog: drop the pending selection. */
+  const handleCancelFolderLoad = useCallback(() => {
+    setPendingFolder(null);
+  }, []);
 
   /**
    * Dialog confirm: remember the mapping against this group's header,
@@ -1356,6 +1362,14 @@ export default function App() {
           request={mappingRequest}
           onConfirm={confirmMapping}
           onCancel={cancelMapping}
+        />
+      ) : null}
+      {pendingFolder ? (
+        <InputFolderDialog
+          folderName={pendingFolder.folderName}
+          allFiles={pendingFolder.files}
+          onLoad={handleConfirmFolderLoad}
+          onCancel={handleCancelFolderLoad}
         />
       ) : null}
     </div>

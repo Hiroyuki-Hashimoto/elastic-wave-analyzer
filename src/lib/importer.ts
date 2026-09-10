@@ -505,35 +505,29 @@ export function readFileText(file: File): Promise<string> {
 }
 
 /**
- * List the supported data files at the top level of a directory handle
- * obtained from `window.showDirectoryPicker()`. Recurses one level deep
- * (subdirectory entries whose own iterator yields data files) so a
- * single-frequency test folder can be grouped by sample, but does not
- * walk arbitrary depth to keep the load bounded. Returned files are
- * sorted by name with `localeCompare` so 2 < 10 reads naturally.
+ * Filter a list of files by filename keywords. Keywords are supplied
+ * as a comma-separated string and parsed once here so callers do not
+ * have to repeat the trim/skip-empty rule. AND requires every keyword
+ * to appear in the filename (case-insensitive substring); OR requires
+ * at least one. An empty keyword list is treated as "no filter" and
+ * the input is returned in its original order so the dialog's preview
+ * matches the layout the OS picker just produced.
  */
-export async function listDataFilesInDirectory(
-  dirHandle: FileSystemDirectoryHandle,
-): Promise<File[]> {
-  const collected: File[] = [];
-  // Top-level entries: file -> wrap; subdirectory -> recurse one level.
-  // The parent `FileSystemHandle` type does not expose `getFile()` /
-  // `values()`; the kind check + cast narrows to the concrete subtype
-  // the runtime actually returns.
-  for await (const entry of dirHandle.values()) {
-    if (entry.kind === "file") {
-      if (/\.(csv|tsv|txt)$/i.test(entry.name)) {
-        collected.push(await (entry as FileSystemFileHandle).getFile());
-      }
-    } else if (entry.kind === "directory") {
-      const subDir = entry as FileSystemDirectoryHandle;
-      for await (const sub of subDir.values()) {
-        if (sub.kind === "file" && /\.(csv|tsv|txt)$/i.test(sub.name)) {
-          collected.push(await (sub as FileSystemFileHandle).getFile());
-        }
-      }
+export function filterFilesByKeywords(
+  files: File[],
+  keywordsText: string,
+  mode: "AND" | "OR",
+): File[] {
+  const keywords = keywordsText
+    .split(",")
+    .map((k) => k.trim().toLowerCase())
+    .filter((k) => k.length > 0);
+  if (keywords.length === 0) return files;
+  return files.filter((file) => {
+    const lower = file.name.toLowerCase();
+    if (mode === "AND") {
+      return keywords.every((k) => lower.includes(k));
     }
-  }
-  collected.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  return collected;
+    return keywords.some((k) => lower.includes(k));
+  });
 }

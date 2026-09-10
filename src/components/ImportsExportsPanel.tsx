@@ -3,8 +3,12 @@ import ToggleSwitch from "./ToggleSwitch";
 
 type Props = {
   onSelectFiles: (files: File[]) => void;
-  /** Open the directory picker and load every supported file inside. */
-  onSelectInputFolder: () => void;
+  /**
+   * Hand the FileList from the webkitdirectory picker to App. The
+   * filtering to .csv/.tsv/.txt and the confirmation dialog live in
+   * App so the panel stays free of picker-specific state.
+   */
+  onSelectInputFolder: (files: File[], folderName: string) => void;
   /** True when at least one confirmed or canceled result is available. */
   canExport: boolean;
   /** True when a file is loaded and a chart is rendered. */
@@ -45,6 +49,7 @@ export default function ImportsExportsPanel({
   onEditImportMapping,
 }: Props) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const folderInputRef = React.useRef<HTMLInputElement>(null);
 
   return (
     <aside className="imports-exports-panel">
@@ -76,16 +81,48 @@ export default function ImportsExportsPanel({
               e.target.value = "";
             }}
           />
-          {/* Folder picker: opens the system directory dialog via the
-              File System Access API. A second same-width button keeps
-              the Imports column shape even with the picker added. */}
+          {/* Folder picker: the hidden input has webkitdirectory so the
+              OS file dialog selects a folder rather than individual
+              files. Unlike the File System Access API path, this does
+              not produce a per-origin "Allow this site to view and
+              copy files?" prompt; the user just re-picks the folder
+              every load. */}
           <button
             type="button"
             className="file-button"
-            onClick={onSelectInputFolder}
+            onClick={() => folderInputRef.current?.click()}
           >
             Select input folder
           </button>
+          <input
+            ref={folderInputRef}
+            type="file"
+            // webkitdirectory is the cross-browser attribute name;
+            // modern Chrome also accepts `directory` but webkitdirectory
+            // covers Firefox/Safari too. React's InputHTMLAttributes
+            // does not declare them, so cast through `any` to keep the
+            // runtime behavior while staying strict everywhere else.
+            {...({
+              webkitdirectory: "",
+              directory: "",
+            } as React.InputHTMLAttributes<HTMLInputElement>)}
+            // accept is omitted so the OS dialog shows folders; some
+            // platforms still filter by extension if accept is set.
+            className="file-input-hidden"
+            onChange={(e) => {
+              const list = e.target.files;
+              if (list && list.length > 0) {
+                // webkitRelativePath has the form "<folder>/<file>";
+                // the leading segment is the folder name the user picked.
+                const folderName =
+                  list[0].webkitRelativePath.split("/")[0] ||
+                  "selected folder";
+                onSelectInputFolder(Array.from(list), folderName);
+              }
+              // Reset value so picking the same folder twice still fires.
+              e.target.value = "";
+            }}
+          />
           {/* Mapping editor: link only, since the saved-mapping
               summary was dropped to make room for the folder button.
               Clicking it still opens the full mapping dialog. */}
