@@ -5,6 +5,10 @@
 - Read this AGENTS.md before making changes.
 - The repository is public (GitHub Pages); never commit secrets, keys, or personal data.
 - Do not run git push unless the user explicitly asks.
+- When the user asks to push, also publish the site: run `npm run deploy`
+  (builds and force-pushes dist/ to the gh-pages branch) after the push,
+  and report the result. Publishing is otherwise manual; never run
+  `npm run deploy` on your own initiative.
 - Commit each completed, independently verifiable feature as a separate commit.
 - Before every commit, run npm run build and report the result.
 - Stop after each planned implementation step and wait for user approval before starting the next step.
