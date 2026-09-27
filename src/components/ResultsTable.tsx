@@ -42,25 +42,38 @@ const STATUS_DOT: Partial<
  * the shared formatAnalysisResultCells helper, so the table and the
  * downloaded CSV never drift.
  *
- * Only the newest MAX_VISIBLE_ROWS rows are rendered; each row body is
- * memoized on primitive props so appending a result re-renders just
- * the affected rows instead of the whole table.
+ * At most MAX_VISIBLE_ROWS rows are rendered, ending just after the
+ * newest just-acted row so the last Enter/Esc result sits at the bottom
+ * of the table; earlier history is trimmed. Each row body is memoized on
+ * primitive props so appending a result re-renders just the affected
+ * rows instead of the whole table.
  *
- * On mount — and on every append while the user already sits near the
- * bottom — the wrapper scrolls to the newest row so a running session
- * stays visible without yanking manual scrolling.
+ * On mount — and whenever the processing position advances while the
+ * user already sits near the bottom — the wrapper scrolls to the newest
+ * row so a running session stays visible without yanking manual
+ * scrolling.
  */
 export default function ResultsTable({ rows }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Follow new rows only while pinned near the bottom (40 px window);
-  // scrolling up to inspect history is never interrupted.
+  // Handled rows form a contiguous prefix before the current entry (the
+  // queue is only ever advanced forward), so the window ends right after
+  // the newest terminal row: end is exclusive. With no current entry the
+  // whole list is terminal and the window ends at the tail.
+  const currentIndex = rows.findIndex((r) => r.status === "current");
+  const end = currentIndex === -1 ? rows.length : Math.max(1, currentIndex);
+  const start = Math.max(0, end - MAX_VISIBLE_ROWS);
+  const visible = rows.slice(start, end);
+  const truncated = start > 0 || end < rows.length;
+
+  // Follow the processing position only while pinned near the bottom
+  // (40 px window); scrolling up to inspect history is never interrupted.
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distance < 40) el.scrollTop = el.scrollHeight;
-  }, [rows.length]);
+  }, [end]);
 
   if (rows.length === 0) {
     return (
@@ -69,10 +82,6 @@ export default function ResultsTable({ rows }: Props) {
       </div>
     );
   }
-
-  // Slice off the oldest rows once the batch passes the visible window.
-  const hiddenCount = Math.max(0, rows.length - MAX_VISIBLE_ROWS);
-  const visible = hiddenCount > 0 ? rows.slice(hiddenCount) : rows;
 
   return (
     <div ref={wrapperRef} className="results-table-wrapper">
@@ -89,18 +98,18 @@ export default function ResultsTable({ rows }: Props) {
           </tr>
         </thead>
         <tbody>
-          {hiddenCount > 0 ? (
+          {truncated ? (
             // Header row spanning all columns notes the trimmed history.
             <tr className="results-table-more">
               <td colSpan={RESULTS_CSV_HEADER.length + 1}>
-                Showing the latest {MAX_VISIBLE_ROWS} of {rows.length} rows.
+                Showing rows {start + 1}–{end} of {rows.length}.
               </td>
             </tr>
           ) : null}
           {visible.map((row, i) => {
             // Absolute index keeps keys stable across the sliding window
             // (fileName alone could collide when a file loads twice).
-            const absoluteIndex = hiddenCount + i;
+            const absoluteIndex = start + i;
             return (
               <ResultRowItem
                 key={`${absoluteIndex}-${row.fileName}`}
