@@ -282,9 +282,15 @@ export default function App() {
   // old-to-new downward, followed by the live batch in load order.
   // Pending and current rows show blank value cells until confirmed.
   const resultRows = useMemo<ResultRow[]>(() => {
+    // Index both sides once so joining results to queue rows stays O(N)
+    // instead of scanning the other list for every element.
+    const resultsByName = new Map<string, AnalysisResult>();
+    for (const r of results) resultsByName.set(r.fileName, r);
+    const queueNames = new Set(queue.map((e) => e.fileName));
     const rows: ResultRow[] = [];
     for (const r of results) {
-      if (!queue.some((e) => e.fileName === r.fileName)) {
+      // Results from older batches (file no longer queued) sit at the top.
+      if (!queueNames.has(r.fileName)) {
         rows.push({ fileName: r.fileName, status: "confirmed", result: r });
       }
     }
@@ -292,7 +298,7 @@ export default function App() {
       rows.push({
         fileName: e.fileName,
         status: e.status,
-        result: results.find((r) => r.fileName === e.fileName) ?? null,
+        result: resultsByName.get(e.fileName) ?? null,
       });
     }
     return rows;
