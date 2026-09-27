@@ -17,9 +17,10 @@ type Props = {
  * Newest rows rendered at once. A long batch would otherwise keep one
  * table row per file in the DOM and re-diff them on every render, so
  * the per-file cost grew with the batch; showing the latest window
- * keeps that cost bounded.
+ * keeps that cost bounded. Layout and paint still scale with the
+ * window, so it stays small: 100 rows cost ~30 ms per file advance.
  */
-const MAX_VISIBLE_ROWS = 100;
+const MAX_VISIBLE_ROWS = 30;
 
 /**
  * Dot colour per terminal state; pending/current stay dotless so the
