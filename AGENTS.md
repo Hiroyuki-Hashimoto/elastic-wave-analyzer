@@ -108,5 +108,17 @@ compatibility statement, just a sign the minor number grew too large.
      `chore(release): bump version to X.Y.Z`
   3. `git tag -a vX.Y.Z -m "vX.Y.Z"`
   4. Push main and the tag, then run `npm run deploy`
-  5. `gh release create vX.Y.Z` with English notes summarizing the
-     changes since the previous tag
+  5. `gh release create vX.Y.Z` with bilingual notes (see below)
+     summarizing the changes since the previous tag
+
+### Release notes
+
+- Write every release note in English and Japanese: each paragraph or
+  bullet in English, followed by its Japanese version.
+- Keep it about the size of v1.0.1: one or two sentences of summary
+  plus one bullet per user-visible change, one or two lines each —
+  roughly 100 English words at most, with the Japanese matching.
+- Say what changed for the user. Leave root causes, measurements and
+  implementation details to the commit messages.
+- Skip boilerplate such as the PWA reload note unless the release
+  makes it necessary.
