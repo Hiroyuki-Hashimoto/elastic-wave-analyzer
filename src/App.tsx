@@ -1900,14 +1900,32 @@ function buildConfirmMessage(
 /**
  * True when the event target is a form field where the user is typing
  * or otherwise editing text. Used to skip Enter / Escape / Z shortcuts
- * so they never interfere with normal form input.
+ * so they never interfere with normal form input. Caret-less inputs
+ * such as the toggle checkboxes are excluded: they never use Enter or
+ * Escape, so a just-clicked toggle must not swallow Next/Skip.
  */
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
   const tag = target.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  // Only text-entry inputs keep the keys; toggles and the like pass them on.
+  if (target instanceof HTMLInputElement) {
+    return !NON_TEXT_INPUT_TYPES.has(target.type);
+  }
+  return tag === "TEXTAREA" || tag === "SELECT";
 }
+
+/** Input types without a text caret; Enter/Escape stay global on them. */
+const NON_TEXT_INPUT_TYPES = new Set([
+  "checkbox",
+  "radio",
+  "range",
+  "button",
+  "submit",
+  "reset",
+  "color",
+  "file",
+]);
 
 /** Stable identity of a detection result: identical spec and header. */
 function groupKeyOf(detected: DetectedImport | null): string {
