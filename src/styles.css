@@ -67,6 +67,14 @@ body,
   flex: 0 0 auto;
 }
 
+/* Version label: quieter than the repo link and never wraps or shrinks. */
+.app-version {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* Title + panel-toggle button share one row so the button never
    widens the chart's left margin by more than its natural width when
    the panels collapse. space-between pushes the button to the right

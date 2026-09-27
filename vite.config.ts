@@ -1,11 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import pkg from "./package.json";
 
 export default defineConfig({
   // Relative asset URLs so the built site works under GitHub Pages'
   // /<repo>/ project-page subpath (and any future custom domain).
   base: "./",
+  // Bake package.json's version into the bundle for the header label.
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   plugins: [
     react(),
     // Offline + installable app: Workbox precaches the bundle so the

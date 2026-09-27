@@ -1596,6 +1596,9 @@ export default function App() {
                   </svg>
                   GitHub
                 </a>
+                <span className="app-version" title="App version">
+                  v{__APP_VERSION__}
+                </span>
               </span>
             )}
             <button

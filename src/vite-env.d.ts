@@ -3,6 +3,9 @@
 // surface waiting service-worker updates in React state.
 /// <reference types="vite-plugin-pwa/client" />
 
+/** package.json version, injected at build time by vite.config.ts define. */
+declare const __APP_VERSION__: string;
+
 /**
  * TypeScript 5.6's lib.dom.d.ts does not expose the File System
  * Access API surface used by the export features. The output-folder
