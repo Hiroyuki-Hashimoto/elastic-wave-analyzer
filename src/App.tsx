@@ -1700,6 +1700,12 @@ export default function App() {
                   settings.overlayPrevEnabled ? prevOverlay : null
                 }
               />
+            ) : currentEntry ? (
+              // A file is current but its waveform is still being read and
+              // parsed: show which file, not the "no data" placeholder.
+              <div className="empty-state">
+                Loading {currentEntry.fileName}…
+              </div>
             ) : (
               <div className="empty-state">
                 No data loaded. Please select a data file.
