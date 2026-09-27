@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { Notice, NoticeKind } from "../types";
 
 type Props = {
@@ -28,14 +29,15 @@ export default function NotificationsErrorsPanel({ errors, notices }: Props) {
   // Build a unified event list. Validation errors get a synthetic
   // negative id so they always sort to the bottom of the newest-first
   // ordering (notices have a monotonic positive counter from App).
-  const errorRows: EventRow[] = errors.map((text, i) => ({
-    id: -i,
-    kind: "error",
-    text,
-  }));
-  const merged: EventRow[] = [...notices, ...errorRows]
-    .slice()
-    .sort((a, b) => b.id - a.id);
+  // Memoized so unrelated App renders do not re-sort the whole log.
+  const merged: EventRow[] = useMemo(() => {
+    const errorRows: EventRow[] = errors.map((text, i) => ({
+      id: -i,
+      kind: "error",
+      text,
+    }));
+    return [...notices, ...errorRows].sort((a, b) => b.id - a.id);
+  }, [notices, errors]);
 
   return (
     <aside className="notifications-errors-panel">

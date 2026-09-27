@@ -93,6 +93,14 @@ const MAPPING_STORAGE_KEY = "elastic-wave-analyzer/import-mapping/v1";
 const EXPORT_STORAGE_KEY = "elastic-wave-analyzer/export-settings/v1";
 
 /**
+ * Newest notices kept in the in-app log. A long batch appends one
+ * "Now processing" line per file, so an uncapped log would grow the
+ * DOM and the per-render cost with every file; trimming to the latest
+ * entries keeps the panel's work bounded.
+ */
+const MAX_NOTICES = 200;
+
+/**
  * Outcome of the one-time settings read: values restored verbatim,
  * nothing stored yet (first visit), or a stored blob that failed
  * validation and was discarded in favour of the defaults.
@@ -335,10 +343,14 @@ export default function App() {
    */
   const addNotice = useCallback((kind: NoticeKind, text: string) => {
     noticeIdRef.current += 1;
-    setNotices((prev) => [
-      ...prev,
-      { id: noticeIdRef.current, kind, text },
-    ]);
+    setNotices((prev) => {
+      const next = [...prev, { id: noticeIdRef.current, kind, text }];
+      // Keep only the newest entries so batch length cannot grow the
+      // log, the DOM, and the per-render cost without bound.
+      return next.length > MAX_NOTICES
+        ? next.slice(next.length - MAX_NOTICES)
+        : next;
+    });
   }, []);
 
   // Mirror the queue into a ref after each commit so the async parse
