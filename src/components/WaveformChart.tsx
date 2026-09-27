@@ -668,7 +668,9 @@ function buildOptions(
       [timeUsScale]: { min: winMin, max: winMax, time: false },
       y: { min: yMin, max: yMax },
     },
-    cursor: { show: true },
+    // uPlot cursor.bind: route the document mouseup listener through a
+    // factory that remembers it, so destroyPlots can detach it.
+    cursor: { show: true, bind: { mouseup: bindTrackedMouseup } },
     hooks: {
       // uPlot hook fired after axes, grid, and series are all drawn.
       // We draw marker lines/annotations here so they overlay the trace
@@ -878,12 +880,43 @@ function fmtHover(v: number | null | undefined): string {
   return v != null && Number.isFinite(v) ? v.toFixed(2) : "--";
 }
 
+/**
+ * Document mouseup listener uPlot currently holds per plot. uPlot adds it
+ * on every mousedown and removes it on mouseup, but destroy() forgets it
+ * without detaching; a left-click pick destroys the plot in between, so
+ * each pick leaked a listener retaining the whole plot and its data.
+ */
+const docMouseupListeners = new WeakMap<UPlot, (e: MouseEvent) => void>();
+
+/**
+ * cursor.bind.mouseup factory mirroring uPlot's default filtBtn0 (left
+ * button only, optional target check) while recording document-level
+ * listeners so destroyPlots can remove them.
+ */
+const bindTrackedMouseup = ((
+  u: UPlot,
+  targ: EventTarget,
+  handler: (e: MouseEvent) => null,
+  onlyTarg = true,
+) => {
+  const listener = (e: MouseEvent) => {
+    // Same filter as uPlot's filtBtn0: primary button, own target if required.
+    if (e.button === 0 && (!onlyTarg || e.target === targ)) handler(e);
+  };
+  // Only the document binding outlives the plot's own DOM.
+  if (targ === document) docMouseupListeners.set(u, listener);
+  return listener;
+}) as unknown as UPlot.Cursor.MouseListenerFactory;
+
 /** Destroy the uPlot instance held in plotRef, if any, and clear the ref. */
 function destroyPlots(
   plotRef: { current: UPlot | null },
   _hostRef: { current: HTMLDivElement | null },
 ) {
   if (plotRef.current) {
+    const listener = docMouseupListeners.get(plotRef.current);
+    // A pick mid-click leaves uPlot's mouseup attached; detach it first.
+    if (listener) document.removeEventListener("mouseup", listener);
     plotRef.current.destroy();
     plotRef.current = null;
   }
