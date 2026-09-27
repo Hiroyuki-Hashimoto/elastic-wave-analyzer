@@ -1348,13 +1348,12 @@ export default function App() {
    */
   const handleSetAutoDownloadPng = useCallback(
     (next: boolean) => {
-      setAutoDownloadPng((prev) => {
-        if (prev === next) return prev;
-        addNotice("info", `PNG auto-save: ${next ? "ON" : "OFF"}`);
-        return next;
-      });
+      // Unchanged value: no state write and no duplicate notice.
+      if (next === autoDownloadPng) return;
+      setAutoDownloadPng(next);
+      addNotice("info", `PNG auto-save: ${next ? "ON" : "OFF"}`);
     },
-    [addNotice],
+    [autoDownloadPng, addNotice],
   );
 
   /**
@@ -1364,11 +1363,11 @@ export default function App() {
    * picking first.
    */
   const handleToggleSkip = useCallback(() => {
-    setSkipEnabled((prev) => {
-      addNotice("info", `Skip allowed: ${prev ? "OFF" : "ON"}`);
-      return !prev;
-    });
-  }, [addNotice]);
+    // Notice stays outside the updater, which React may run twice.
+    const next = !skipEnabled;
+    setSkipEnabled(next);
+    addNotice("info", `Skip allowed: ${next ? "ON" : "OFF"}`);
+  }, [skipEnabled, addNotice]);
 
   /**
    * Shared Next/Enter action. Confirms only when all four picks are
@@ -1480,14 +1479,13 @@ export default function App() {
    * the maximum so the deepest zoom stays reachable, no wrap-around.
    */
   const handleZoomIn = useCallback(() => {
-    setSettings((prev) => {
-      const max = ZOOM_PERCENTAGES.length - 1;
-      const next = Math.min(max, prev.zoomIndex + 1);
-      if (next === prev.zoomIndex) return prev;
-      addNotice("info", `Zoom: ${Math.round(ZOOM_PERCENTAGES[next] * 100)}%`);
-      return { ...prev, zoomIndex: next };
-    });
-  }, [addNotice]);
+    const max = ZOOM_PERCENTAGES.length - 1;
+    const next = Math.min(max, settings.zoomIndex + 1);
+    // Already at the deepest zoom: nothing to change or announce.
+    if (next === settings.zoomIndex) return;
+    setSettings((prev) => ({ ...prev, zoomIndex: next }));
+    addNotice("info", `Zoom: ${Math.round(ZOOM_PERCENTAGES[next] * 100)}%`);
+  }, [settings.zoomIndex, addNotice]);
 
   /**
    * Step the chart x-zoom out by one ZOOM_PERCENTAGES tick. Clamped at
@@ -1495,13 +1493,12 @@ export default function App() {
    * range.
    */
   const handleZoomOut = useCallback(() => {
-    setSettings((prev) => {
-      const next = Math.max(0, prev.zoomIndex - 1);
-      if (next === prev.zoomIndex) return prev;
-      addNotice("info", `Zoom: ${Math.round(ZOOM_PERCENTAGES[next] * 100)}%`);
-      return { ...prev, zoomIndex: next };
-    });
-  }, [addNotice]);
+    const next = Math.max(0, settings.zoomIndex - 1);
+    // Already at 100%: nothing to change or announce.
+    if (next === settings.zoomIndex) return;
+    setSettings((prev) => ({ ...prev, zoomIndex: next }));
+    addNotice("info", `Zoom: ${Math.round(ZOOM_PERCENTAGES[next] * 100)}%`);
+  }, [settings.zoomIndex, addNotice]);
 
   // Global keyboard handler: Enter mirrors Next, Escape mirrors Skip.
   // Z stays dropped in favor of the dedicated Zoom +/− buttons.
