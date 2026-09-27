@@ -343,8 +343,11 @@ export default function App() {
    */
   const addNotice = useCallback((kind: NoticeKind, text: string) => {
     noticeIdRef.current += 1;
+    // Capture now: updaters run later, so two calls in one event would
+    // both read the final ref value and share a React key.
+    const id = noticeIdRef.current;
     setNotices((prev) => {
-      const next = [...prev, { id: noticeIdRef.current, kind, text }];
+      const next = [...prev, { id, kind, text }];
       // Keep only the newest entries so batch length cannot grow the
       // log, the DOM, and the per-render cost without bound.
       return next.length > MAX_NOTICES
