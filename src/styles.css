@@ -1129,6 +1129,16 @@ body,
   border-radius: 50%;
 }
 
+/* Note row shown when older results are trimmed from the visible window. */
+.results-table-more td {
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  position: sticky;
+  top: 26px;
+}
+
 @media (max-width: 760px) {
   .app-main {
     grid-template-columns: 1fr;

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { RESULTS_CSV_HEADER, formatAnalysisResultCells } from "../lib/exporter";
 import type { AnalysisResult } from "../types";
 
@@ -12,6 +12,14 @@ export type ResultRow = {
 type Props = {
   rows: ResultRow[];
 };
+
+/**
+ * Newest rows rendered at once. A long batch would otherwise keep one
+ * table row per file in the DOM and re-diff them on every render, so
+ * the per-file cost grew with the batch; showing the latest window
+ * keeps that cost bounded.
+ */
+const MAX_VISIBLE_ROWS = 100;
 
 /**
  * Dot colour per terminal state; pending/current stay dotless so the
@@ -33,6 +41,10 @@ const STATUS_DOT: Partial<
  * canceled / invalid). Cell formatting matches exportResultsCsv via
  * the shared formatAnalysisResultCells helper, so the table and the
  * downloaded CSV never drift.
+ *
+ * Only the newest MAX_VISIBLE_ROWS rows are rendered; each row body is
+ * memoized on primitive props so appending a result re-renders just
+ * the affected rows instead of the whole table.
  *
  * On mount — and on every append while the user already sits near the
  * bottom — the wrapper scrolls to the newest row so a running session
@@ -57,6 +69,11 @@ export default function ResultsTable({ rows }: Props) {
       </div>
     );
   }
+
+  // Slice off the oldest rows once the batch passes the visible window.
+  const hiddenCount = Math.max(0, rows.length - MAX_VISIBLE_ROWS);
+  const visible = hiddenCount > 0 ? rows.slice(hiddenCount) : rows;
+
   return (
     <div ref={wrapperRef} className="results-table-wrapper">
       <table className="results-table">
@@ -72,33 +89,25 @@ export default function ResultsTable({ rows }: Props) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => {
-            const cells = formatAnalysisResultCells(row.result);
-            // Stable key from insertion index + fileName; fileName alone
-            // could collide when the same file loads twice.
-            const key = `${i}-${row.fileName}`;
-            const dot = STATUS_DOT[row.status];
+          {hiddenCount > 0 ? (
+            // Header row spanning all columns notes the trimmed history.
+            <tr className="results-table-more">
+              <td colSpan={RESULTS_CSV_HEADER.length + 1}>
+                Showing the latest {MAX_VISIBLE_ROWS} of {rows.length} rows.
+              </td>
+            </tr>
+          ) : null}
+          {visible.map((row, i) => {
+            // Absolute index keeps keys stable across the sliding window
+            // (fileName alone could collide when a file loads twice).
+            const absoluteIndex = hiddenCount + i;
             return (
-              <tr key={key}>
-                <td className="results-table-status">
-                  {dot ? (
-                    <span
-                      className="status-dot"
-                      style={{ background: dot.color }}
-                      title={dot.label}
-                      aria-label={dot.label}
-                    />
-                  ) : null}
-                </td>
-                {/* File name comes from the row itself so pending rows
-                    keep theirs; value cells mirror the CSV exporter. */}
-                <td className="results-table-filename">{row.fileName}</td>
-                {cells.slice(1).map((cell, j) => (
-                  <td key={j} className="results-table-cell">
-                    {cell}
-                  </td>
-                ))}
-              </tr>
+              <ResultRowItem
+                key={`${absoluteIndex}-${row.fileName}`}
+                fileName={row.fileName}
+                status={row.status}
+                result={row.result}
+              />
             );
           })}
         </tbody>
@@ -106,3 +115,43 @@ export default function ResultsTable({ rows }: Props) {
     </div>
   );
 }
+
+/**
+ * One table body row. Memoized on its primitive props (fileName,
+ * status) plus the stable result reference, so rows that are not the
+ * one just appended skip re-rendering entirely.
+ */
+const ResultRowItem = memo(function ResultRowItem({
+  fileName,
+  status,
+  result,
+}: {
+  fileName: string;
+  status: ResultRow["status"];
+  result: AnalysisResult | null;
+}) {
+  const cells = formatAnalysisResultCells(result);
+  const dot = STATUS_DOT[status];
+  return (
+    <tr>
+      <td className="results-table-status">
+        {dot ? (
+          <span
+            className="status-dot"
+            style={{ background: dot.color }}
+            title={dot.label}
+            aria-label={dot.label}
+          />
+        ) : null}
+      </td>
+      {/* File name comes from the row itself so pending rows keep
+          theirs; value cells mirror the CSV exporter. */}
+      <td className="results-table-filename">{fileName}</td>
+      {cells.slice(1).map((cell, j) => (
+        <td key={j} className="results-table-cell">
+          {cell}
+        </td>
+      ))}
+    </tr>
+  );
+});
