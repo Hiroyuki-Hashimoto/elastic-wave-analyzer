@@ -234,6 +234,14 @@ export default function App() {
   // Latest queue mirrored into a ref so the async parse effect can move
   // to the next entry on failure without a stale closure.
   const queueRef = useRef<QueueEntry[]>([]);
+  // Parsed waveform of the next pending entry, produced during idle time
+  // so advancing is instant. Only one entry is ever cached.
+  const prefetchRef = useRef<{ id: number; raw: RawWaveform } | null>(null);
+  // Id currently being prefetched, to avoid duplicate work.
+  const prefetchingRef = useRef<number | null>(null);
+  // Bumped on every new batch so an in-flight prefetch from an older
+  // queue is discarded instead of caching a stale waveform.
+  const prefetchGenRef = useRef(0);
 
   const trimError = useMemo(() => validateTrim(settings), [settings]);
 
@@ -339,13 +347,88 @@ export default function App() {
     queueRef.current = queue;
   }, [queue]);
 
-  // Parse the current entry on demand: read its file, run the resolved
-  // mapping, and expose the result as the single live waveform. Clearing
-  // currentRaw first drops the previous file's arrays right away.
+  /**
+   * Read and parse the first still-pending entry during idle time and
+   * cache its waveform, so when it becomes current the advance only has
+   * to rebuild the chart. Safe to call repeatedly; a cache hit or an
+   * in-flight parse for the same entry is a no-op.
+   */
+  const prefetchNext = useCallback(() => {
+    // Preview the same entry the queue will promote: the first pending
+    // one after the current row. Already-handled invalid rows are skipped.
+    const currentIdx = queueRef.current.findIndex(
+      (e) => e.status === "current",
+    );
+    const next = queueRef.current.find(
+      (e, i) => i > currentIdx && e.status === "pending",
+    );
+    if (!next) return;
+    // Already ready or already being read: nothing to do.
+    if (prefetchRef.current?.id === next.id) return;
+    if (prefetchingRef.current === next.id) return;
+    // A cache for a different entry is stale (skipped/canceled); drop it.
+    prefetchRef.current = null;
+    prefetchingRef.current = next.id;
+    const gen = prefetchGenRef.current;
+    const run = () => {
+      void (async () => {
+        try {
+          const text = await readFileText(next.file);
+          if (gen !== prefetchGenRef.current) return;
+          const raw = parseWithSpec(text, next.fileName, next.spec);
+          if (gen !== prefetchGenRef.current) return;
+          // Only cache while the entry is still waiting to be processed.
+          const still = queueRef.current.find((e) => e.id === next.id);
+          if (!still || still.status !== "pending") {
+            return;
+          }
+          prefetchRef.current = { id: next.id, raw };
+        } catch {
+          // Prefetch failures are non-fatal: the file is reparsed and
+          // reported normally when it becomes current.
+        } finally {
+          if (prefetchingRef.current === next.id) {
+            prefetchingRef.current = null;
+          }
+        }
+      })();
+    };
+    // Defer to idle time so prefetch never competes with the visible file.
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (
+          cb: () => void,
+          options?: { timeout: number },
+        ) => number;
+      }
+    ).requestIdleCallback;
+    // timeout guarantees the prefetch still runs on a busy main thread,
+    // just without the idle-priority niceness.
+    if (typeof ric === "function") ric(run, { timeout: 1000 });
+    else window.setTimeout(run, 50);
+  }, []);
+
+  // Parse the current entry on demand: adopt a prefetched waveform when
+  // available, otherwise read its file and run the resolved mapping.
+  // Clearing currentRaw first drops the previous file's arrays.
   useEffect(() => {
     const entry = currentEntry;
     if (!entry) {
       setCurrentRaw(null);
+      return;
+    }
+    const cached = prefetchRef.current;
+    // Prefetch hit: the waveform is already parsed, so adopt it now and
+    // start prefetching the entry after it.
+    if (cached && cached.id === entry.id) {
+      prefetchRef.current = null;
+      setCurrentRaw(cached.raw);
+      addNotice(
+        "info",
+        `Now processing: ${entry.fileName} ` +
+          `(${cached.raw.timeUs.length} samples) using ${entry.how}.`,
+      );
+      prefetchNext();
       return;
     }
     let cancelled = false;
@@ -361,6 +444,7 @@ export default function App() {
           `Now processing: ${entry.fileName} ` +
             `(${raw.timeUs.length} samples) using ${entry.how}.`,
         );
+        prefetchNext();
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
@@ -372,10 +456,10 @@ export default function App() {
             ? { ...x, status: "invalid" as const, errorMessage: msg }
             : x,
         );
+        const failedIdx = marked.findIndex((x) => x.id === entry.id);
+        // Move forward to the next pending row; the invalid one stays put.
         const nextIdx = marked.findIndex(
-          (x) =>
-            x.id !== entry.id &&
-            (x.status === "pending" || x.status === "invalid"),
+          (x, i) => i > failedIdx && x.status === "pending",
         );
         if (nextIdx === -1) {
           setQueue(marked);
@@ -394,7 +478,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentEntry, addNotice]);
+  }, [currentEntry, addNotice, prefetchNext]);
 
   // Explain discarded settings once at mount: the user should know why
   // their previous values did not survive an app update. Nothing stored
@@ -643,7 +727,11 @@ export default function App() {
         ...rest.map((e) => ({ ...e })),
       ]);
       // Drop any waveform from the previous batch; the parse effect
-      // rebuilds the new current entry on demand.
+      // rebuilds the new current entry on demand. Bumping the generation
+      // also invalidates any in-flight prefetch of the old queue.
+      prefetchGenRef.current += 1;
+      prefetchRef.current = null;
+      prefetchingRef.current = null;
       setCurrentRaw(null);
       setPicker(emptyPickerState());
       // Fresh batch starts with skip OFF so a stale toggle cannot
@@ -711,13 +799,15 @@ export default function App() {
       // Compute the new queue synchronously so the notice text can read
       // the new current file's name without relying on setState callback
       // return values to flow outside the callback.
-      const current = queue.find((e) => e.status === "current");
-      if (!current) return;
+      const currentIdx = queue.findIndex((e) => e.status === "current");
+      if (currentIdx === -1) return;
       let nextQueue = queue.map<QueueEntry>((e) =>
         e.status === "current" ? { ...e, status: lastStatus } : e,
       );
+      // Promote the first pending row after the finished one; invalid
+      // rows left behind are terminal and must not be revisited.
       const nextIdx = nextQueue.findIndex(
-        (e) => e.status === "pending" || e.status === "invalid",
+        (e, i) => i > currentIdx && e.status === "pending",
       );
       if (nextIdx !== -1) {
         nextQueue = nextQueue.slice();
