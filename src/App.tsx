@@ -103,14 +103,21 @@ type StoredSettingsOutcome =
   | { status: "discarded" };
 
 /**
- * A single entry in the analysis queue. raw is null when the file
- * failed to parse.
+ * A single entry in the analysis queue. Only lightweight metadata and
+ * the File handle are kept; the waveform itself is parsed on demand
+ * when the entry becomes current and released as soon as it stops
+ * being current, so a large batch never holds every parsed array.
  */
 type QueueEntry = {
   /** Monotonic id so React keys stay stable across edits. */
   id: number;
   fileName: string;
-  raw: RawWaveform | null;
+  /** Source handle; its data is only read when this entry is parsed. */
+  file: File;
+  /** Resolved mapping to parse this file under. */
+  spec: ImportSpec;
+  /** Notice text naming the mapping source used at parse time. */
+  how: string;
   status: "current" | "pending" | "confirmed" | "canceled" | "invalid";
   errorMessage: string | null;
 };
@@ -221,7 +228,12 @@ export default function App() {
     () => queue.find((e) => e.status === "current") ?? null,
     [queue],
   );
-  const currentRaw = currentEntry?.raw ?? null;
+  // Parsed waveform of the current entry, rebuilt on demand so only one
+  // file's arrays are ever in memory.
+  const [currentRaw, setCurrentRaw] = useState<RawWaveform | null>(null);
+  // Latest queue mirrored into a ref so the async parse effect can move
+  // to the next entry on failure without a stale closure.
+  const queueRef = useRef<QueueEntry[]>([]);
 
   const trimError = useMemo(() => validateTrim(settings), [settings]);
 
@@ -320,6 +332,69 @@ export default function App() {
       { id: noticeIdRef.current, kind, text },
     ]);
   }, []);
+
+  // Mirror the queue into a ref after each commit so the async parse
+  // effect below can promote the next entry without a stale closure.
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
+  // Parse the current entry on demand: read its file, run the resolved
+  // mapping, and expose the result as the single live waveform. Clearing
+  // currentRaw first drops the previous file's arrays right away.
+  useEffect(() => {
+    const entry = currentEntry;
+    if (!entry) {
+      setCurrentRaw(null);
+      return;
+    }
+    let cancelled = false;
+    setCurrentRaw(null);
+    void (async () => {
+      try {
+        const text = await readFileText(entry.file);
+        const raw = parseWithSpec(text, entry.fileName, entry.spec);
+        if (cancelled) return;
+        setCurrentRaw(raw);
+        addNotice(
+          "info",
+          `Now processing: ${entry.fileName} ` +
+            `(${raw.timeUs.length} samples) using ${entry.how}.`,
+        );
+      } catch (e) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        addNotice("error", `${entry.fileName}: ${msg}`);
+        // Mark the entry invalid and move to the next one so a single bad
+        // file cannot stall the batch; the error stays in the log.
+        const marked = queueRef.current.map((x) =>
+          x.id === entry.id
+            ? { ...x, status: "invalid" as const, errorMessage: msg }
+            : x,
+        );
+        const nextIdx = marked.findIndex(
+          (x) =>
+            x.id !== entry.id &&
+            (x.status === "pending" || x.status === "invalid"),
+        );
+        if (nextIdx === -1) {
+          setQueue(marked);
+          addNotice(
+            "success",
+            "All files processed. You can download the results CSV.",
+          );
+          return;
+        }
+        const nextQueue = marked.slice();
+        nextQueue[nextIdx] = { ...nextQueue[nextIdx], status: "current" };
+        setQueue(nextQueue);
+        setPicker(emptyPickerState());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentEntry, addNotice]);
 
   // Explain discarded settings once at mount: the user should know why
   // their previous values did not survive an app update. Nothing stored
@@ -496,72 +571,41 @@ export default function App() {
   const isSupportedFile = (file: File): boolean =>
     /\.(csv|tsv|txt)$/i.test(file.name) || file.type.startsWith("text/");
 
-  /** Build a queue entry from a parse attempt, recording id + error. */
-  const entryFromParse = useCallback(
-    (fileName: string, attempt: () => RawWaveform): QueueEntry => {
-      queueIdRef.current += 1;
-      const id = queueIdRef.current;
-      try {
-        const raw = attempt();
-        return {
-          id,
-          fileName,
-          raw,
-          status: "pending",
-          errorMessage: null,
-        };
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        addNotice("error", `${fileName}: ${msg}`);
-        return {
-          id,
-          fileName,
-          raw: null,
-          status: "invalid",
-          errorMessage: msg,
-        };
-      }
-    },
-    [addNotice],
-  );
-
   /**
-   * Parse one already-read file under a chosen spec and turn it into a
-   * queue entry, posting an info notice with the sample count and the
-   * mapping source ("auto-detect", "previous", or "confirmed").
+   * Build a pending queue entry that pairs a File with the mapping it
+   * will be parsed under. Parsing is deferred until the entry becomes
+   * current, so no waveform arrays are allocated at selection time.
    */
-  const loadWithSpec = useCallback(
-    (
-      fileName: string,
-      text: string,
-      spec: ImportSpec,
-      how: string,
-    ): QueueEntry =>
-      entryFromParse(fileName, () => {
-        const raw = parseWithSpec(text, fileName, spec);
-        addNotice(
-          "info",
-          `Selected ${fileName} (${raw.timeUs.length} samples) using ${how}.`,
-        );
-        return raw;
-      }),
-    [addNotice, entryFromParse],
+  const entryForFile = useCallback(
+    (file: File, spec: ImportSpec, how: string): QueueEntry => {
+      queueIdRef.current += 1;
+      return {
+        id: queueIdRef.current,
+        fileName: file.name,
+        file,
+        spec,
+        how,
+        status: "pending",
+        errorMessage: null,
+      };
+    },
+    [],
   );
 
   /**
    * Attempt a silent load under the saved mapping. Only files whose
    * detected header constitution exactly matches the confirmed one (or
-   * headerless files with the same structural shape) qualify, and the
-   * parse must succeed so a broken file still reaches the dialog.
-   * Returns the queue entry, or null when confirmation is required.
+   * headerless files with the same structural shape) qualify. The
+   * decision is made from the sniffed prefix only; the actual parse
+   * happens later, when the entry becomes current. Returns the queue
+   * entry, or null when confirmation is required.
    */
   const trySilentLoad = useCallback(
-    async (
-      fileName: string,
+    (
+      file: File,
       detected: DetectedImport | null,
       prefix: string,
-      readFullText: () => Promise<string>,
-    ): Promise<QueueEntry | null> => {
+    ): QueueEntry | null => {
       const memo = mappingMemo;
       if (!memo) return null;
       // Exact header match: same delimiter, same normalized names.
@@ -579,34 +623,9 @@ export default function App() {
       const how = headerMatch
         ? "your saved mapping (same header)"
         : "your saved mapping (same shape)";
-      // Match confirmed: only now pay for the whole-file read; the text
-      // is released as soon as the parse returns.
-      let text: string;
-      try {
-        text = await readFullText();
-      } catch {
-        return null;
-      }
-      try {
-        const raw = parseWithSpec(text, fileName, memo.spec);
-        queueIdRef.current += 1;
-        addNotice(
-          "info",
-          `Selected ${fileName} (${raw.timeUs.length} samples) using ${how}.`,
-        );
-        return {
-          id: queueIdRef.current,
-          fileName,
-          raw,
-          status: "pending",
-          errorMessage: null,
-        };
-      } catch {
-        // Parse failure under the saved mapping: confirm manually.
-        return null;
-      }
+      return entryForFile(file, memo.spec, how);
     },
-    [mappingMemo, addNotice],
+    [mappingMemo, entryForFile],
   );
 
   /**
@@ -623,16 +642,19 @@ export default function App() {
         { ...first, status: "current" },
         ...rest.map((e) => ({ ...e })),
       ]);
+      // Drop any waveform from the previous batch; the parse effect
+      // rebuilds the new current entry on demand.
+      setCurrentRaw(null);
       setPicker(emptyPickerState());
       // Fresh batch starts with skip OFF so a stale toggle cannot
       // silently auto-cancel files in the next session.
       setSkipEnabled(false);
-      if (entries.length > 1) {
-        addNotice(
-          "info",
-          `Selected ${entries.length} files. Starting with ${first.fileName}.`,
-        );
-      }
+      // One notice per batch replaces the old per-file "Loaded" line;
+      // the sample count arrives when each entry is parsed.
+      addNotice(
+        "info",
+        `Selected ${entries.length} file(s). Starting with ${first.fileName}.`,
+      );
     },
     [addNotice],
   );
@@ -697,22 +719,17 @@ export default function App() {
       const nextIdx = nextQueue.findIndex(
         (e) => e.status === "pending" || e.status === "invalid",
       );
-      let nextCurrent: QueueEntry | null = null;
       if (nextIdx !== -1) {
-        const promoted: QueueEntry = {
-          ...nextQueue[nextIdx],
-          status: "current",
-        };
-        nextCurrent = promoted;
         nextQueue = nextQueue.slice();
-        nextQueue[nextIdx] = promoted;
+        nextQueue[nextIdx] = { ...nextQueue[nextIdx], status: "current" };
       }
       setQueue(nextQueue);
+      // Drop the finished file's arrays; the parse effect rebuilds the
+      // next current entry and logs "Now processing".
+      setCurrentRaw(null);
       // Reset picker for the next file.
       setPicker(emptyPickerState());
-      if (nextCurrent) {
-        addNotice("info", `Now processing: ${nextCurrent.fileName}`);
-      } else {
+      if (nextIdx === -1) {
         addNotice(
           "success",
           "All files processed. You can download the results CSV.",
@@ -752,19 +769,13 @@ export default function App() {
           continue;
         }
         // Sniff a bounded prefix so a large batch never holds every full
-        // text at once; only a confirmed silent load reads it all.
+        // text at once; only the parse step reads a whole file.
         // eslint-disable-next-line no-await-in-loop
         const prefix = await readFileTextPrefix(f, SNIFF_PREFIX_BYTES);
         const detected = guessImportSpec(prefix);
-        // The saved mapping is checked from the prefix; a whole-file read
-        // happens only when the parse is actually going to run.
-        // eslint-disable-next-line no-await-in-loop
-        const silent = await trySilentLoad(
-          f.name,
-          detected,
-          prefix,
-          () => readFileText(f),
-        );
+        // The saved mapping is checked from the prefix; no full read or
+        // parse happens here, only when the entry becomes current.
+        const silent = trySilentLoad(f, detected, prefix);
         if (silent) {
           entries.push(silent);
           continue;
@@ -969,7 +980,7 @@ export default function App() {
    * next format group or commit the whole batch to the queue.
    */
   const confirmMapping = useCallback(
-    async (spec: ImportSpec) => {
+    (spec: ImportSpec) => {
       setMappingRequest(null);
       const group = pendingGroupsRef.current.shift();
       // Edit-only mode (no pending files): update the saved mapping in
@@ -992,13 +1003,11 @@ export default function App() {
         spec: { ...spec },
         headerCells: group.detected?.columns ?? null,
       });
-      // Read and parse each confirmed file one at a time so only one full
-      // text is in memory at once, however large the group is.
+      // Queue each confirmed file with the resolved mapping; parsing is
+      // deferred until the entry becomes current.
       for (const f of group.files) {
-        // eslint-disable-next-line no-await-in-loop
-        const text = await readFileText(f);
         queuePrefixRef.current.push(
-          loadWithSpec(f.name, text, spec, "the confirmed import mapping"),
+          entryForFile(f, spec, "the confirmed import mapping"),
         );
       }
       if (pendingGroupsRef.current.length > 0) {
@@ -1007,7 +1016,7 @@ export default function App() {
         finishGroups();
       }
     },
-    [addNotice, loadWithSpec, showNextGroup, finishGroups],
+    [addNotice, entryForFile, showNextGroup, finishGroups],
   );
 
   /**
