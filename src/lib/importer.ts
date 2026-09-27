@@ -485,10 +485,15 @@ function stripQuotes(cell: string): string {
 }
 
 /**
- * Read a File as text via FileReader. Kept beside the parser so the
- * whole input pipeline lives in one module; nothing leaves the browser.
+ * Byte budget for sniffer reads. The table detector only samples the
+ * first ~100 non-blank lines, so a prefix is enough to propose a
+ * mapping while keeping whole-file texts out of memory during a large
+ * batch load.
  */
-export function readFileText(file: File): Promise<string> {
+export const SNIFF_PREFIX_BYTES = 64 * 1024;
+
+/** Shared FileReader plumbing for the full and prefix text readers. */
+function readBlobText(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -500,8 +505,28 @@ export function readFileText(file: File): Promise<string> {
     };
     reader.onerror = () =>
       reject(reader.error ?? new Error("File read error."));
-    reader.readAsText(file);
+    reader.readAsText(blob);
   });
+}
+
+/**
+ * Read a File as text via FileReader. Kept beside the parser so the
+ * whole input pipeline lives in one module; nothing leaves the browser.
+ */
+export function readFileText(file: File): Promise<string> {
+  return readBlobText(file);
+}
+
+/**
+ * Read only the leading `maxBytes` of a File as text. Used for format
+ * sniffing so a batch of large files never has every full text in
+ * memory at once; slicing to a byte boundary may cut the last line.
+ */
+export function readFileTextPrefix(
+  file: File,
+  maxBytes: number,
+): Promise<string> {
+  return readBlobText(file.slice(0, maxBytes));
 }
 
 /**

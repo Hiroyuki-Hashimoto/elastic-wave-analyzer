@@ -37,6 +37,8 @@ import {
   matchesRememberedSpec,
   parseWithSpec,
   readFileText,
+  readFileTextPrefix,
+  SNIFF_PREFIX_BYTES,
   specsEqual,
   STANDARD_CSV_SPEC,
 } from "./lib/importer";
@@ -119,8 +121,11 @@ type QueueEntry = {
  * could not interpret at all).
  */
 type PendingGroup = {
-  files: { fileName: string; text: string }[];
+  files: File[];
   detected: DetectedImport | null;
+  /** Full text of the group's first file, kept only to feed the mapping
+   * dialog's preview; the remaining files are read on confirmation. */
+  preview: { fileName: string; text: string };
 };
 
 /**
@@ -536,7 +541,7 @@ export default function App() {
         const raw = parseWithSpec(text, fileName, spec);
         addNotice(
           "info",
-          `Loaded ${fileName} (${raw.timeUs.length} samples) using ${how}.`,
+          `Selected ${fileName} (${raw.timeUs.length} samples) using ${how}.`,
         );
         return raw;
       }),
@@ -551,33 +556,43 @@ export default function App() {
    * Returns the queue entry, or null when confirmation is required.
    */
   const trySilentLoad = useCallback(
-    (
+    async (
       fileName: string,
-      text: string,
       detected: DetectedImport | null,
-    ): QueueEntry | null => {
+      prefix: string,
+      readFullText: () => Promise<string>,
+    ): Promise<QueueEntry | null> => {
       const memo = mappingMemo;
       if (!memo) return null;
       // Exact header match: same delimiter, same normalized names.
       const headerMatch =
         detected != null && matchesMemoHeader(detected, memo);
       // Headerless files have no names to compare, so an identical
-      // detected spec plus a structural fingerprint stands in.
+      // detected spec plus a structural fingerprint stands in. The
+      // prefix extends well past the 50 lines the check inspects.
       const shapeMatch =
         memo.headerCells == null &&
         (detected == null || detected.columns == null) &&
         (detected == null || specsEqual(detected.spec, memo.spec)) &&
-        matchesRememberedSpec(text, memo.spec);
+        matchesRememberedSpec(prefix, memo.spec);
       if (!headerMatch && !shapeMatch) return null;
       const how = headerMatch
         ? "your saved mapping (same header)"
         : "your saved mapping (same shape)";
+      // Match confirmed: only now pay for the whole-file read; the text
+      // is released as soon as the parse returns.
+      let text: string;
+      try {
+        text = await readFullText();
+      } catch {
+        return null;
+      }
       try {
         const raw = parseWithSpec(text, fileName, memo.spec);
         queueIdRef.current += 1;
         addNotice(
           "info",
-          `Loaded ${fileName} (${raw.timeUs.length} samples) using ${how}.`,
+          `Selected ${fileName} (${raw.timeUs.length} samples) using ${how}.`,
         );
         return {
           id: queueIdRef.current,
@@ -615,7 +630,7 @@ export default function App() {
       if (entries.length > 1) {
         addNotice(
           "info",
-          `Queued ${entries.length} files. Starting with ${first.fileName}.`,
+          `Selected ${entries.length} files. Starting with ${first.fileName}.`,
         );
       }
     },
@@ -648,7 +663,8 @@ export default function App() {
       : mappingMemo?.spec ?? STANDARD_CSV_SPEC;
     const remembered = mappingMemo;
     setMappingRequest({
-      pending: group.files,
+      pendingCount: group.files.length,
+      previewFile: group.preview,
       initialSpec: { ...prefill },
       columns: group.detected?.columns ?? null,
       autoDetected: group.detected != null,
@@ -735,10 +751,20 @@ export default function App() {
           addNotice("error", `Unsupported file: ${f.name}`);
           continue;
         }
+        // Sniff a bounded prefix so a large batch never holds every full
+        // text at once; only a confirmed silent load reads it all.
         // eslint-disable-next-line no-await-in-loop
-        const text = await readFileText(f);
-        const detected = guessImportSpec(text);
-        const silent = trySilentLoad(f.name, text, detected);
+        const prefix = await readFileTextPrefix(f, SNIFF_PREFIX_BYTES);
+        const detected = guessImportSpec(prefix);
+        // The saved mapping is checked from the prefix; a whole-file read
+        // happens only when the parse is actually going to run.
+        // eslint-disable-next-line no-await-in-loop
+        const silent = await trySilentLoad(
+          f.name,
+          detected,
+          prefix,
+          () => readFileText(f),
+        );
         if (silent) {
           entries.push(silent);
           continue;
@@ -750,9 +776,17 @@ export default function App() {
           (g) => groupKeyOf(g.detected) === key,
         );
         if (existing) {
-          existing.files.push({ fileName: f.name, text });
+          existing.files.push(f);
         } else {
-          groups.push({ files: [{ fileName: f.name, text }], detected });
+          // Only the group's first file needs its full text, to drive the
+          // mapping dialog's preview; later files keep just their handle.
+          // eslint-disable-next-line no-await-in-loop
+          const previewText = await readFileText(f);
+          groups.push({
+            files: [f],
+            detected,
+            preview: { fileName: f.name, text: previewText },
+          });
         }
       }
 
@@ -778,7 +812,8 @@ export default function App() {
   /** Open the mapping dialog in edit-only mode (no pending files). */
   const openMappingEditor = useCallback(() => {
     setMappingRequest({
-      pending: [],
+      pendingCount: 0,
+      previewFile: null,
       initialSpec: { ...(mappingMemo?.spec ?? STANDARD_CSV_SPEC) },
       columns: mappingMemo?.headerCells ?? null,
       autoDetected: true,
@@ -825,7 +860,7 @@ export default function App() {
       if (filteredFiles.length === 0) return;
       addNotice(
         "info",
-        `Loading ${filteredFiles.length} file(s) from folder.`,
+        `Selected ${filteredFiles.length} file(s) from folder.`,
       );
       void handleFiles(filteredFiles);
     },
@@ -934,7 +969,7 @@ export default function App() {
    * next format group or commit the whole batch to the queue.
    */
   const confirmMapping = useCallback(
-    (spec: ImportSpec) => {
+    async (spec: ImportSpec) => {
       setMappingRequest(null);
       const group = pendingGroupsRef.current.shift();
       // Edit-only mode (no pending files): update the saved mapping in
@@ -957,14 +992,13 @@ export default function App() {
         spec: { ...spec },
         headerCells: group.detected?.columns ?? null,
       });
+      // Read and parse each confirmed file one at a time so only one full
+      // text is in memory at once, however large the group is.
       for (const f of group.files) {
+        // eslint-disable-next-line no-await-in-loop
+        const text = await readFileText(f);
         queuePrefixRef.current.push(
-          loadWithSpec(
-            f.fileName,
-            f.text,
-            spec,
-            "the confirmed import mapping",
-          ),
+          loadWithSpec(f.name, text, spec, "the confirmed import mapping"),
         );
       }
       if (pendingGroupsRef.current.length > 0) {
@@ -988,7 +1022,7 @@ export default function App() {
       addNotice(
         "warning",
         `Import canceled for ${group.files.length} file(s): ` +
-          group.files.map((f) => f.fileName).join(", "),
+          group.files.map((f) => f.name).join(", "),
       );
     }
     if (pendingGroupsRef.current.length > 0) {

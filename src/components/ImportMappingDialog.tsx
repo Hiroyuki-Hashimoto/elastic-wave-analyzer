@@ -5,16 +5,22 @@ import {
 } from "../lib/importer";
 import type { ImportDelimiter, ImportSpec } from "../types";
 
-/** One file awaiting a confirmed mapping (text already read). */
-export type PendingImportFile = {
+/**
+ * First file of the group with its full text. It drives the raw preview
+ * and the live reparse; the remaining group files are only read after
+ * confirmation, so their texts never have to be held during a load.
+ */
+export type PreviewImportFile = {
   fileName: string;
   text: string;
 };
 
 /** Everything the dialog needs: files to resolve plus prefill values. */
 export type MappingRequest = {
-  /** Files to parse after confirmation; [] means "edit saved mapping". */
-  pending: PendingImportFile[];
+  /** Files the mapping applies to; 0 means "edit saved mapping". */
+  pendingCount: number;
+  /** First pending file and its text for the preview; null in edit mode. */
+  previewFile: PreviewImportFile | null;
   initialSpec: ImportSpec;
   /** Header names from the sniffed first file (null when headerless). */
   columns: string[] | null;
@@ -68,8 +74,8 @@ export default function ImportMappingDialog({
 }: Props) {
   const [spec, setSpec] = useState<ImportSpec>(request.initialSpec);
 
-  const firstFile = request.pending[0] ?? null;
-  const editMode = request.pending.length === 0;
+  const firstFile = request.previewFile;
+  const editMode = request.pendingCount === 0;
   const remembered = request.rememberedSpec;
 
   // Widest row among a sample decides how many column options exist.
@@ -162,7 +168,7 @@ export default function ImportMappingDialog({
         <p className="mapping-subtitle">
           {editMode
             ? "Changes apply to files you load from now on. Already loaded files keep their data; drop them again to reload."
-            : `Confirm how these ${request.pending.length} file(s) parse, starting with ${firstFile?.fileName ?? ""}. The mapping applies to all of them.`}
+            : `Confirm how these ${request.pendingCount} file(s) parse, starting with ${firstFile?.fileName ?? ""}. The mapping applies to all of them.`}
         </p>
 
         <div className="mapping-grid">
