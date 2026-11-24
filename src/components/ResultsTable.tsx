@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { RESULTS_CSV_HEADER, formatAnalysisResultCells } from "../lib/exporter";
 import type { AnalysisResult } from "../types";
@@ -56,6 +56,16 @@ const STATUS_DOT: Partial<
  */
 export default function ResultsTable({ rows, onOpenEntry }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const theadRef = useRef<HTMLTableSectionElement>(null);
+  // Header row height in px: the body rows start this far below the top
+  // of the scroll content, which the virtualizer must know to align them.
+  const [theadHeight, setTheadHeight] = useState(0);
+
+  // Measure the header after every commit; React skips the re-render
+  // when the height is unchanged, so this settles after the first pass.
+  useLayoutEffect(() => {
+    setTheadHeight(theadRef.current?.offsetHeight ?? 0);
+  });
 
   // Row the chart is showing; with none left (batch done) the last row
   // stands in so the finished batch stays in view.
@@ -69,6 +79,9 @@ export default function ResultsTable({ rows, onOpenEntry }: Props) {
     getScrollElement: () => wrapperRef.current,
     estimateSize: () => ESTIMATED_ROW_HEIGHT,
     overscan: OVERSCAN_ROWS,
+    // scrollMargin offsets every row by the header height, so "end"
+    // alignment puts the row itself (not the one above) at the bottom.
+    scrollMargin: theadHeight,
   });
 
   // On mount and on every advance, put the anchor row at the bottom of
@@ -78,7 +91,7 @@ export default function ResultsTable({ rows, onOpenEntry }: Props) {
     if (anchorIndex < 0) return;
     // align "end" scrolls the row flush with the viewport's bottom edge.
     virtualizer.scrollToIndex(anchorIndex, { align: "end" });
-  }, [anchorIndex, virtualizer]);
+  }, [anchorIndex, theadHeight, virtualizer]);
 
   /**
    * One delegated handler for every row, so rows need no per-row
@@ -108,17 +121,19 @@ export default function ResultsTable({ rows, onOpenEntry }: Props) {
   const items = virtualizer.getVirtualItems();
   // Spacer heights stand in for the unrendered rows above and below so
   // the scrollbar reflects the whole table (px = summed row heights).
-  const padTop = items.length > 0 ? items[0].start : 0;
+  // Item offsets include scrollMargin, while getTotalSize excludes it.
+  const padTop = items.length > 0 ? items[0].start - theadHeight : 0;
   const padBottom =
     items.length > 0
-      ? virtualizer.getTotalSize() - items[items.length - 1].end
+      ? virtualizer.getTotalSize() -
+        (items[items.length - 1].end - theadHeight)
       : 0;
 
   return (
     <>
       <div ref={wrapperRef} className="results-table-wrapper">
         <table className="results-table">
-          <thead>
+          <thead ref={theadRef}>
             <tr>
               {/* Narrow status column: header intentionally blank. */}
               <th scope="col" className="results-table-status" aria-label="Status" />
