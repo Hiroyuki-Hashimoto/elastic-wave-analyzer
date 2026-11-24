@@ -183,10 +183,6 @@ export default function App() {
   const [autoDownloadPng, setAutoDownloadPng] = useState(
     loadStoredAutoDownloadPng,
   );
-  // Local skip-allowed flag: when true, Next/Enter on an incomplete
-  // picker advances the queue with a canceled row instead of blocking.
-  // Resets on every new batch so a stale toggle never carries over.
-  const [skipEnabled, setSkipEnabled] = useState(false);
   // When true, the left-column panels (Imports & Exports, Settings,
   // Notifications) collapse so the chart area can use that horizontal
   // space. Flipped by the toggle button next to the app title.
@@ -749,9 +745,6 @@ export default function App() {
       prefetchingRef.current = null;
       setCurrentRaw(null);
       setPicker(emptyPickerState());
-      // Fresh batch starts with skip OFF so a stale toggle cannot
-      // silently auto-cancel files in the next session.
-      setSkipEnabled(false);
       // One notice per batch replaces the old per-file "Loaded" line;
       // the sample count arrives when each entry is parsed.
       addNotice(
@@ -1357,19 +1350,6 @@ export default function App() {
   );
 
   /**
-   * Flip the skip-allowed toggle. When ON, the dedicated Skip button
-   * becomes live and can advance the queue on an incomplete picker;
-   * when OFF, the Skip button stays disabled so the user must finish
-   * picking first.
-   */
-  const handleToggleSkip = useCallback(() => {
-    // Notice stays outside the updater, which React may run twice.
-    const next = !skipEnabled;
-    setSkipEnabled(next);
-    addNotice("info", `Skip allowed: ${next ? "ON" : "OFF"}`);
-  }, [skipEnabled, addNotice]);
-
-  /**
    * Shared Next/Enter action. Confirms only when all four picks are
    * placed (mirroring the original Enter behavior: prevOverlay freeze,
    * optional auto-PNG, queue advance). Skipping moved to its own
@@ -1463,9 +1443,8 @@ export default function App() {
   ]);
 
   /**
-   * Skip the current file unconditionally (no picks recorded). Caller
-   * is responsible for guarding with Allow-skip and a loaded file;
-   * the Skip button itself is disabled while Allow-skip is OFF.
+   * Skip the current file unconditionally (no picks recorded). Always
+   * available while a file is loaded; picks need not be complete.
    */
   const handleSkip = useCallback(() => {
     if (!currentRaw) return;
@@ -1516,15 +1495,6 @@ export default function App() {
         handleAdvance();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        // Skip is gated by Allow-skip, so the keyboard shortcut
-        // warns instead of bypassing the toggle.
-        if (!skipEnabled) {
-          addNotice(
-            "warning",
-            "Skip is disabled. Enable Allow skip first.",
-          );
-          return;
-        }
         handleSkip();
       }
     };
@@ -1534,8 +1504,6 @@ export default function App() {
     handleAdvance,
     handleSkip,
     mappingRequest,
-    skipEnabled,
-    addNotice,
   ]);
 
   // Display label for the current file in the progress header.
@@ -1678,7 +1646,6 @@ export default function App() {
               never jumps upward. */}
           {currentRaw ? (
             <PickGuidanceBar
-              skipEnabled={skipEnabled}
               mappingOpen={mappingRequest != null}
               canZoomIn={settings.zoomIndex < ZOOM_PERCENTAGES.length - 1}
               canZoomOut={settings.zoomIndex > 0}
@@ -1686,7 +1653,6 @@ export default function App() {
               onSkip={handleSkip}
               onZoomIn={handleZoomIn}
               onZoomOut={handleZoomOut}
-              onToggleSkip={handleToggleSkip}
             />
           ) : null}
           <div className="chart-stack">
@@ -1753,13 +1719,10 @@ export default function App() {
  *
  * Action flow:
  *  - Next: strict confirm only; mirrors the Enter key.
- *  - Allow-skip: iOS-style toggle; arms the Skip button.
- *  - Skip: skip the current file without recording; disabled until
- *    Allow-skip is ON.
+ *  - Skip: skip the current file without recording; mirrors Escape.
  *  - Zoom +/-: step the chart x-zoom in fixed ticks.
  */
 function PickGuidanceBar(props: {
-  skipEnabled: boolean;
   mappingOpen: boolean;
   canZoomIn: boolean;
   canZoomOut: boolean;
@@ -1767,10 +1730,8 @@ function PickGuidanceBar(props: {
   onSkip: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onToggleSkip: () => void;
 }) {
   const {
-    skipEnabled,
     mappingOpen,
     canZoomIn,
     canZoomOut,
@@ -1778,11 +1739,7 @@ function PickGuidanceBar(props: {
     onSkip,
     onZoomIn,
     onZoomOut,
-    onToggleSkip,
   } = props;
-  // Skip is live only when the user has armed Allow-skip and the
-  // mapping dialog is closed; same disabled-when conditions as Zoom.
-  const canSkip = skipEnabled && !mappingOpen;
   return (
     <div className="pick-guidance-row">
       <div className="pick-guidance">
@@ -1807,40 +1764,19 @@ function PickGuidanceBar(props: {
             or press <kbd className="kbd-inline">Enter</kbd>
           </span>
         </button>
-        {/* Allow-skip + Skip grouped in a shared rounded frame so they
-           read as one logical "skip" pair. Allow-skip is the iOS-style
-           toggle; Skip is the actual fire control. */}
-        <div className="pick-action-skip-group">
-          <button
-            type="button"
-            className={`pick-action-button pick-action-button-toggle${
-              skipEnabled ? " is-on" : ""
-            }`}
-            onClick={onToggleSkip}
-            aria-pressed={skipEnabled}
-            title="When ON, Skip can advance the queue on an incomplete picker"
-          >
-            <span className="pick-action-button-label">Allow skip</span>
-            <span className="toggle-switch" aria-hidden="true">
-              <span className="toggle-switch-track" />
-              <span className="toggle-switch-thumb" />
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`pick-action-button pick-action-button-skip pick-action-button-stacked${
-              canSkip ? " is-enabled" : ""
-            }`}
-            onClick={onSkip}
-            disabled={!canSkip}
-            title="Skip the current file without recording picks (Esc)"
-          >
-            <span className="pick-action-button-label">→ Skip</span>
-            <span className="pick-action-button-sub">
-              or press <kbd className="kbd-inline">Esc</kbd>
-            </span>
-          </button>
-        </div>
+        {/* Skip: always live, takes the whole second grid cell. */}
+        <button
+          type="button"
+          className="pick-action-button pick-action-button-skip pick-action-button-stacked"
+          onClick={onSkip}
+          disabled={mappingOpen}
+          title="Skip the current file without recording picks (Esc)"
+        >
+          <span className="pick-action-button-label">→ Skip</span>
+          <span className="pick-action-button-sub">
+            or press <kbd className="kbd-inline">Esc</kbd>
+          </span>
+        </button>
         {/* Zoom +/-: compact ticks on the right edge of the action row. */}
         <button
           type="button"

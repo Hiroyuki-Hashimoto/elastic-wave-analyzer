@@ -727,7 +727,7 @@ body,
 
 .pick-actions {
   /* The text panel now eats ~480px, so the action row gets whatever
-     the chart area has left. Single row of 4 cells (Next / skip-group
+     the chart area has left. Single row of 4 cells (Next / Skip
      / Zoom+ / Zoom-); Zoom columns compressed to make room. */
   flex: 1 1 0;
   min-width: 0;
@@ -786,33 +786,9 @@ body,
   filter: brightness(1.05);
 }
 
-/* Allow-skip toggle: the button itself stays panel-colored so it
-   never reads as a second primary action; only the switch track and
-   the button border turn accent when armed. Label hugs the left edge,
-   switch hugs the right. position:relative anchors the absolutely
-   positioned .toggle-switch-track / .toggle-switch-thumb descendants
-   so they live inside the button instead of stretching across the
-   whole window (whose inset:0 would otherwise match the initial
-   containing block). */
-.pick-action-button-toggle {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px;
-  text-align: left;
-}
-
-.pick-action-button-toggle.is-on {
-  border-color: var(--accent);
-}
-
-/* iOS-style toggle pill: shared across the Allow-skip button (visual
-   spans nested inside the button) and the Settings panel toggles
-   (where the label wrapper drives the same .is-on state). The
-   .is-on class lives on either parent (button or label) and the
-   track/thumb pick up the ON paint from there. */
+/* iOS-style toggle pill used by the Settings panel toggles; the
+   label wrapper carries .is-on and the track/thumb pick up the ON
+   paint from there. */
 .toggle-switch {
   position: relative;
   display: inline-block;
@@ -867,79 +843,27 @@ body,
   transition: transform 0.15s ease;
 }
 
-/* ON state — same rules apply whether .is-on sits on a button or a
-   label wrapper. The thumb slides 16px (track interior ~18px, rounded
+/* ON state. The thumb slides 16px (track interior ~18px, rounded
    to 16 so the thumb never hugs the inner border). */
-.pick-action-button-toggle.is-on .toggle-switch-track,
 .toggle-switch.is-on .toggle-switch-track {
   background: var(--accent);
   border-color: var(--accent);
 }
-.pick-action-button-toggle.is-on .toggle-switch-thumb,
 .toggle-switch.is-on .toggle-switch-thumb {
   transform: translateX(16px);
 }
 
-/* Allow-skip + Skip share a rounded frame so they read as one
-   logical "skip" pair; the inner buttons drop their own borders and
-   round only the outer corners to fuse into the group. */
-.pick-action-skip-group {
-  display: flex;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--panel);
-  overflow: hidden;
-  min-width: 0;
-}
-.pick-action-skip-group .pick-action-button {
-  border: none;
-  border-radius: 0;
-  flex: 1 1 0;
-  min-width: 0;
-}
-.pick-action-skip-group .pick-action-button + .pick-action-button {
-  /* Hairline divider between the toggle and the Skip fire control. */
-  border-left: 1px solid var(--border);
-}
-/* Allow-skip inside the group keeps the toggle's flex layout; the
-   switch sits to the right of the label just like in standalone use.
-   position:relative is repeated here so the .pick-action-skip-group
-   ancestor (higher specificity) still anchors the toggle's absolutely
-   positioned switch visuals. */
-.pick-action-skip-group .pick-action-button-toggle {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 4px 8px;
-  text-align: left;
-}
-/* Skip button: when armed (Allow-skip ON), it fills with accent and
-   the text turns white so the user reads it as a live primary action
-   sitting next to Allow-skip. The left divider inherited from the
-   skip-group is hidden so the accent color reaches the toggle seam. */
-.pick-action-button-skip.is-enabled {
+/* Skip button: always live, so it is filled with accent and white
+   text like Next; the disabled base style still applies while the
+   mapping dialog is open. */
+.pick-action-button-skip {
   background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
 }
-.pick-action-button-skip.is-enabled:has(+ *) {
-  /* Hide the inherited divider when Skip is armed so the accent
-     paint runs flush against the toggle boundary. */
-  border-left-color: transparent;
-}
-.pick-action-button-skip.is-enabled:hover:not(:disabled) {
+.pick-action-button-skip:hover:not(:disabled) {
   filter: brightness(1.05);
 }
-/* Sub line: muted on the white disabled state, translucent white on
-   the blue enabled state so it stays readable on either background. */
-.pick-action-button-skip .pick-action-button-sub {
-  color: var(--muted);
-}
-.pick-action-button-skip.is-enabled .pick-action-button-sub {
-  color: rgba(255, 255, 255, 0.85);
-}
-
 /* Next button stacks a bold title over a faint "or press Enter" hint;
    column flex keeps the two lines centered regardless of row height. */
 .pick-action-button-stacked {
