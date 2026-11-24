@@ -507,7 +507,7 @@ type ChartMarkers = {
 
 type ChartScrollbarProps = {
   axis: PickAxis;
-  barRef: RefObject<HTMLDivElement>;
+  barRef: RefObject<HTMLDivElement | null>;
   disabled: boolean;
   /** Spacer px width; the string "100%" collapses the thumb at 100%. */
   spacerWidth: number | string;
