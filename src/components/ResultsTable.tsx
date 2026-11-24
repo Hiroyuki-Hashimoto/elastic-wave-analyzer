@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { RESULTS_CSV_HEADER, formatAnalysisResultCells } from "../lib/exporter";
 import type { AnalysisResult } from "../types";
 
@@ -14,13 +15,13 @@ type Props = {
 };
 
 /**
- * Newest rows rendered at once. A long batch would otherwise keep one
- * table row per file in the DOM and re-diff them on every render, so
- * the per-file cost grew with the batch; showing the latest window
- * keeps that cost bounded. Layout and paint still scale with the
- * window, so it stays small: 100 rows cost ~30 ms per file advance.
+ * First-guess row height in px for rows not yet measured; real heights
+ * (long file names wrap) replace it once a row has rendered.
  */
-const MAX_VISIBLE_ROWS = 30;
+const ESTIMATED_ROW_HEIGHT = 23;
+
+/** Extra rows rendered above and below the viewport for smooth scrolling. */
+const OVERSCAN_ROWS = 10;
 
 /**
  * Dot colour per terminal state; pending/current stay dotless so the
@@ -43,38 +44,36 @@ const STATUS_DOT: Partial<
  * the shared formatAnalysisResultCells helper, so the table and the
  * downloaded CSV never drift.
  *
- * At most MAX_VISIBLE_ROWS rows are rendered, ending just after the
- * newest just-acted row so the last Enter/Esc result sits at the bottom
- * of the table; earlier history is trimmed. Each row body is memoized on
- * primitive props so appending a result re-renders just the affected
- * rows instead of the whole table.
- *
- * On mount — and whenever the processing position advances while the
- * user already sits near the bottom — the wrapper scrolls to the newest
- * row so a running session stays visible without yanking manual
- * scrolling.
+ * Every row is part of the table, but only the rows in (or near) the
+ * viewport are in the DOM, so a batch of thousands of files costs the
+ * same per advance as a short one. The current row is highlighted, and
+ * each time it changes the table scrolls so it is the bottom visible row.
  */
 export default function ResultsTable({ rows }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Handled rows form a contiguous prefix before the current entry (the
-  // queue is only ever advanced forward), so the window ends right after
-  // the newest terminal row: end is exclusive. With no current entry the
-  // whole list is terminal and the window ends at the tail.
+  // Row the chart is showing; with none left (batch done) the last row
+  // stands in so the finished batch stays in view.
   const currentIndex = rows.findIndex((r) => r.status === "current");
-  const end = currentIndex === -1 ? rows.length : Math.max(1, currentIndex);
-  const start = Math.max(0, end - MAX_VISIBLE_ROWS);
-  const visible = rows.slice(start, end);
-  const truncated = start > 0 || end < rows.length;
+  const anchorIndex = currentIndex === -1 ? rows.length - 1 : currentIndex;
 
-  // Follow the processing position only while pinned near the bottom
-  // (40 px window); scrolling up to inspect history is never interrupted.
+  // TanStack Virtual: tracks the wrapper's scroll position and returns
+  // the row range to render plus the total height of all rows.
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => wrapperRef.current,
+    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    overscan: OVERSCAN_ROWS,
+  });
+
+  // On mount and on every advance, put the anchor row at the bottom of
+  // the viewport; near the top it simply stays where it already is.
   useEffect(() => {
-    const el = wrapperRef.current;
-    if (!el) return;
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distance < 40) el.scrollTop = el.scrollHeight;
-  }, [end]);
+    // Empty table: nothing to scroll to.
+    if (anchorIndex < 0) return;
+    // align "end" scrolls the row flush with the viewport's bottom edge.
+    virtualizer.scrollToIndex(anchorIndex, { align: "end" });
+  }, [anchorIndex, virtualizer]);
 
   if (rows.length === 0) {
     return (
@@ -83,6 +82,15 @@ export default function ResultsTable({ rows }: Props) {
       </div>
     );
   }
+
+  const items = virtualizer.getVirtualItems();
+  // Spacer heights stand in for the unrendered rows above and below so
+  // the scrollbar reflects the whole table (px = summed row heights).
+  const padTop = items.length > 0 ? items[0].start : 0;
+  const padBottom =
+    items.length > 0
+      ? virtualizer.getTotalSize() - items[items.length - 1].end
+      : 0;
 
   return (
     <div ref={wrapperRef} className="results-table-wrapper">
@@ -99,27 +107,33 @@ export default function ResultsTable({ rows }: Props) {
           </tr>
         </thead>
         <tbody>
-          {truncated ? (
-            // Header row spanning all columns notes the trimmed history.
-            <tr className="results-table-more">
-              <td colSpan={RESULTS_CSV_HEADER.length + 1}>
-                Showing rows {start + 1}–{end} of {rows.length}.
-              </td>
+          {/* Only render a spacer when rows are actually hidden above. */}
+          {padTop > 0 ? (
+            <tr className="results-table-spacer" style={{ height: padTop }}>
+              <td colSpan={RESULTS_CSV_HEADER.length + 1} />
             </tr>
           ) : null}
-          {visible.map((row, i) => {
-            // Absolute index keeps keys stable across the sliding window
-            // (fileName alone could collide when a file loads twice).
-            const absoluteIndex = start + i;
+          {items.map((item) => {
+            const row = rows[item.index];
             return (
               <ResultRowItem
-                key={`${absoluteIndex}-${row.fileName}`}
+                // Index keeps keys unique when a file name loads twice.
+                key={`${item.index}-${row.fileName}`}
+                index={item.index}
+                // measureElement records the rendered row's real height.
+                measureRef={virtualizer.measureElement}
                 fileName={row.fileName}
                 status={row.status}
                 result={row.result}
               />
             );
           })}
+          {/* Only render a spacer when rows are actually hidden below. */}
+          {padBottom > 0 ? (
+            <tr className="results-table-spacer" style={{ height: padBottom }}>
+              <td colSpan={RESULTS_CSV_HEADER.length + 1} />
+            </tr>
+          ) : null}
         </tbody>
       </table>
     </div>
@@ -127,15 +141,19 @@ export default function ResultsTable({ rows }: Props) {
 }
 
 /**
- * One table body row. Memoized on its primitive props (fileName,
- * status) plus the stable result reference, so rows that are not the
- * one just appended skip re-rendering entirely.
+ * One table body row. Memoized on its primitive props plus the stable
+ * result and measureRef references, so only rows whose status or
+ * result changed re-render on an advance.
  */
 const ResultRowItem = memo(function ResultRowItem({
+  index,
+  measureRef,
   fileName,
   status,
   result,
 }: {
+  index: number;
+  measureRef: (el: HTMLTableRowElement | null) => void;
   fileName: string;
   status: ResultRow["status"];
   result: AnalysisResult | null;
@@ -143,7 +161,12 @@ const ResultRowItem = memo(function ResultRowItem({
   const cells = formatAnalysisResultCells(result);
   const dot = STATUS_DOT[status];
   return (
-    <tr>
+    <tr
+      ref={measureRef}
+      // data-index tells TanStack Virtual which row a measurement is for.
+      data-index={index}
+      className={status === "current" ? "is-current" : undefined}
+    >
       <td className="results-table-status">
         {dot ? (
           <span
