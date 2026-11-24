@@ -1,4 +1,12 @@
-import type { AnalysisResult, PickerState, VelocityConfig } from "../types";
+import type {
+  AnalysisResult,
+  DisplayWaveform,
+  PickAxis,
+  PickKind,
+  PickPoint,
+  PickerState,
+  VelocityConfig,
+} from "../types";
 import { resampleOnto } from "./waveform";
 
 /** Return a PickerState with all four picks unset and no confirm/cancel. */
@@ -339,4 +347,50 @@ export function pickerToAnalysisResult(
     ptpVelocityMps,
     distanceMm,
   };
+}
+/**
+ * True when a stored result came from Confirm (all four pick times are
+ * set); Cancel results carry no pick times.
+ */
+export function isConfirmedResult(result: AnalysisResult): boolean {
+  return (
+    result.triggerStartTimeUs !== null &&
+    result.triggerPeakTimeUs !== null &&
+    result.receiverStartTimeUs !== null &&
+    result.receiverPeakTimeUs !== null
+  );
+}
+
+/**
+ * Rebuild a confirmed result's four picks on the current display so a
+ * reopened file shows them again. Each stored time snaps to the nearest
+ * displayed sample (voltages follow the current gain/offset/LPF); a pick
+ * outside the current trim window is left unset.
+ */
+export function pickerStateFromResult(
+  result: AnalysisResult,
+  display: DisplayWaveform,
+): PickerState {
+  const state = emptyPickerState();
+  const t = display.timeUs;
+  // Nothing displayed: there is no sample to snap onto.
+  if (t.length === 0) return state;
+  const snap = (
+    axis: PickAxis,
+    kind: PickKind,
+    timeUs: number | null,
+  ): PickPoint | null => {
+    // Never picked, or trimmed out of view since: leave the slot empty.
+    if (timeUs === null || timeUs < t[0] || timeUs > t[t.length - 1]) {
+      return null;
+    }
+    const index = findNearestSampleIndex(t, timeUs);
+    const values = axis === "trigger" ? display.transmitterV : display.receiverV;
+    return { axis, kind, index, timeUs: t[index], voltage: values[index] };
+  };
+  state.triggerStart = snap("trigger", "start", result.triggerStartTimeUs);
+  state.triggerPeak = snap("trigger", "peak", result.triggerPeakTimeUs);
+  state.receiverStart = snap("receiver", "start", result.receiverStartTimeUs);
+  state.receiverPeak = snap("receiver", "peak", result.receiverPeakTimeUs);
+  return state;
 }

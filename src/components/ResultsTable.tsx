@@ -5,6 +5,8 @@ import type { AnalysisResult } from "../types";
 
 /** One merged row: a queue entry joined with its result (if any). */
 export type ResultRow = {
+  /** Queue entry id to reopen on double-click; null when not reopenable. */
+  entryId: number | null;
   fileName: string;
   status: "pending" | "current" | "confirmed" | "canceled" | "invalid";
   result: AnalysisResult | null;
@@ -12,6 +14,8 @@ export type ResultRow = {
 
 type Props = {
   rows: ResultRow[];
+  /** Open the given queue entry (double-click on its row). */
+  onOpenEntry: (entryId: number) => void;
 };
 
 /**
@@ -48,8 +52,9 @@ const STATUS_DOT: Partial<
  * viewport are in the DOM, so a batch of thousands of files costs the
  * same per advance as a short one. The current row is highlighted, and
  * each time it changes the table scrolls so it is the bottom visible row.
+ * Double-clicking a row of the live batch opens that file.
  */
-export default function ResultsTable({ rows }: Props) {
+export default function ResultsTable({ rows, onOpenEntry }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Row the chart is showing; with none left (batch done) the last row
@@ -75,6 +80,23 @@ export default function ResultsTable({ rows }: Props) {
     virtualizer.scrollToIndex(anchorIndex, { align: "end" });
   }, [anchorIndex, virtualizer]);
 
+  /**
+   * One delegated handler for every row, so rows need no per-row
+   * callback prop and stay memoized across advances.
+   */
+  const handleDoubleClick = (
+    e: React.MouseEvent<HTMLTableSectionElement>,
+  ) => {
+    const tr = (e.target as HTMLElement).closest<HTMLElement>(
+      "tr[data-entry-id]",
+    );
+    // Spacer, older-batch or invalid row: nothing to open.
+    if (!tr) return;
+    // Drop the word selection the browser makes on double-click.
+    window.getSelection()?.removeAllRanges();
+    onOpenEntry(Number(tr.dataset.entryId));
+  };
+
   if (rows.length === 0) {
     return (
       <div className="empty-state">
@@ -93,50 +115,56 @@ export default function ResultsTable({ rows }: Props) {
       : 0;
 
   return (
-    <div ref={wrapperRef} className="results-table-wrapper">
-      <table className="results-table">
-        <thead>
-          <tr>
-            {/* Narrow status column: header intentionally blank. */}
-            <th scope="col" className="results-table-status" aria-label="Status" />
-            {RESULTS_CSV_HEADER.map((h) => (
-              <th key={h} scope="col">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {/* Only render a spacer when rows are actually hidden above. */}
-          {padTop > 0 ? (
-            <tr className="results-table-spacer" style={{ height: padTop }}>
-              <td colSpan={RESULTS_CSV_HEADER.length + 1} />
+    <>
+      <div ref={wrapperRef} className="results-table-wrapper">
+        <table className="results-table">
+          <thead>
+            <tr>
+              {/* Narrow status column: header intentionally blank. */}
+              <th scope="col" className="results-table-status" aria-label="Status" />
+              {RESULTS_CSV_HEADER.map((h) => (
+                <th key={h} scope="col">
+                  {h}
+                </th>
+              ))}
             </tr>
-          ) : null}
-          {items.map((item) => {
-            const row = rows[item.index];
-            return (
-              <ResultRowItem
-                // Index keeps keys unique when a file name loads twice.
-                key={`${item.index}-${row.fileName}`}
-                index={item.index}
-                // measureElement records the rendered row's real height.
-                measureRef={virtualizer.measureElement}
-                fileName={row.fileName}
-                status={row.status}
-                result={row.result}
-              />
-            );
-          })}
-          {/* Only render a spacer when rows are actually hidden below. */}
-          {padBottom > 0 ? (
-            <tr className="results-table-spacer" style={{ height: padBottom }}>
-              <td colSpan={RESULTS_CSV_HEADER.length + 1} />
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody onDoubleClick={handleDoubleClick}>
+            {/* Only render a spacer when rows are actually hidden above. */}
+            {padTop > 0 ? (
+              <tr className="results-table-spacer" style={{ height: padTop }}>
+                <td colSpan={RESULTS_CSV_HEADER.length + 1} />
+              </tr>
+            ) : null}
+            {items.map((item) => {
+              const row = rows[item.index];
+              return (
+                <ResultRowItem
+                  // Index keeps keys unique when a file name loads twice.
+                  key={`${item.index}-${row.fileName}`}
+                  index={item.index}
+                  entryId={row.entryId}
+                  // measureElement records the rendered row's real height.
+                  measureRef={virtualizer.measureElement}
+                  fileName={row.fileName}
+                  status={row.status}
+                  result={row.result}
+                />
+              );
+            })}
+            {/* Only render a spacer when rows are actually hidden below. */}
+            {padBottom > 0 ? (
+              <tr className="results-table-spacer" style={{ height: padBottom }}>
+                <td colSpan={RESULTS_CSV_HEADER.length + 1} />
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+      <p className="results-table-hint">
+        Double-click a row to open that file.
+      </p>
+    </>
   );
 }
 
@@ -147,12 +175,14 @@ export default function ResultsTable({ rows }: Props) {
  */
 const ResultRowItem = memo(function ResultRowItem({
   index,
+  entryId,
   measureRef,
   fileName,
   status,
   result,
 }: {
   index: number;
+  entryId: number | null;
   measureRef: (el: HTMLTableRowElement | null) => void;
   fileName: string;
   status: ResultRow["status"];
@@ -165,7 +195,9 @@ const ResultRowItem = memo(function ResultRowItem({
       ref={measureRef}
       // data-index tells TanStack Virtual which row a measurement is for.
       data-index={index}
-      className={status === "current" ? "is-current" : undefined}
+      // Read by the table's delegated double-click handler.
+      data-entry-id={entryId ?? undefined}
+      className={rowClassName(status, entryId)}
     >
       <td className="results-table-status">
         {dot ? (
@@ -188,3 +220,15 @@ const ResultRowItem = memo(function ResultRowItem({
     </tr>
   );
 });
+
+/** Row classes: the current row is tinted, reopenable rows get a pointer. */
+function rowClassName(
+  status: ResultRow["status"],
+  entryId: number | null,
+): string | undefined {
+  const classes: string[] = [];
+  if (status === "current") classes.push("is-current");
+  // The current row is already open, so only other live rows invite a click.
+  else if (entryId !== null) classes.push("is-openable");
+  return classes.length > 0 ? classes.join(" ") : undefined;
+}

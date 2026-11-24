@@ -727,12 +727,12 @@ body,
 
 .pick-actions {
   /* The text panel now eats ~480px, so the action row gets whatever
-     the chart area has left. Single row of 4 cells (Next / Skip
-     / Zoom+ / Zoom-); Zoom columns compressed to make room. */
+     the chart area has left. Single row of 5 cells (Back / Confirm
+     / Cancel / Zoom+ / Zoom-); Back and Zoom stay narrow. */
   flex: 1 1 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: 1.5fr 1.2fr 0.8fr 0.8fr;
+  grid-template-columns: 0.7fr 1.4fr 1.4fr 0.7fr 0.7fr;
   gap: 4px;
   align-items: stretch;
 }
@@ -775,7 +775,7 @@ body,
 }
 
 /* Primary call-to-action look: same blue used for the import/export
-   buttons so the user reads "Next" as the page's main advance action. */
+   buttons so the user reads "Confirm & Next" as the page's main advance action. */
 .pick-action-button-primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -853,18 +853,18 @@ body,
   transform: translateX(16px);
 }
 
-/* Skip button: always live, so it is filled with accent and white
-   text like Next; the disabled base style still applies while the
+/* Cancel & Next: an advance action like Confirm, so it shares the
+   accent fill; the disabled base style still applies while the
    mapping dialog is open. */
-.pick-action-button-skip {
+.pick-action-button-cancel {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
 }
-.pick-action-button-skip:hover:not(:disabled) {
+.pick-action-button-cancel:hover:not(:disabled) {
   filter: brightness(1.05);
 }
-/* Next button stacks a bold title over a faint "or press Enter" hint;
+/* Confirm / Cancel buttons stack a bold title over a faint "or press Enter" hint;
    column flex keeps the two lines centered regardless of row height. */
 .pick-action-button-stacked {
   display: flex;
@@ -892,7 +892,7 @@ body,
   gap: 3px;
 }
 
-/* Inline kbd badge used on the Next button. Replaces the old guidance
+/* Inline kbd badge used on the Confirm / Cancel buttons. Replaces the old guidance
    kbd style with a translucent shell so it stays legible on the blue
    primary background without breaking contrast on the default buttons. */
 .kbd-inline {
@@ -1065,6 +1065,22 @@ body,
 .results-table tr.is-current td {
   background: #e3eef8;
   font-weight: 600;
+}
+
+/* Live-batch rows reopen on double-click. */
+.results-table tr.is-openable {
+  cursor: pointer;
+}
+.results-table tr.is-openable:hover td {
+  background: var(--bg);
+}
+
+/* One-line usage hint under the table. */
+.results-table-hint {
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 10px;
 }
 
 /* Stand-ins for unrendered rows: no padding or borders, so their

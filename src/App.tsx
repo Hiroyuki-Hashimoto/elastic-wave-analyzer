@@ -19,6 +19,8 @@ import {
   findReceiverPeakIndex,
   findTriggerPeakIndex,
   findTriggerStartByThreshold,
+  isConfirmedResult,
+  pickerStateFromResult,
   pickerToAnalysisResult,
 } from "./lib/picker";
 import {
@@ -128,6 +130,8 @@ type QueueEntry = {
   how: string;
   status: "current" | "pending" | "confirmed" | "canceled" | "invalid";
   errorMessage: string | null;
+  /** Latest Confirm/Cancel outcome; replaced when the file is redone. */
+  result: AnalysisResult | null;
 };
 
 /**
@@ -162,9 +166,9 @@ export default function App() {
   // Picker state holds the four Start/Peak picks for the current file;
   // replacing a pick on an axis only overwrites that axis/kind slot.
   const [picker, setPicker] = useState<PickerState>(emptyPickerState());
-  // One result per Enter-confirm or Escape-cancel; consumed by the
-  // results CSV download and the PNG chart export.
-  const [results, setResults] = useState<AnalysisResult[]>([]);
+  // Results of earlier batches, archived when a new batch replaces the
+  // queue; the live batch keeps its results on the queue entries.
+  const [history, setHistory] = useState<AnalysisResult[]>([]);
   // Monotonic counter so each notice gets a unique key for React.
   const noticeIdRef = useRef(0);
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -238,6 +242,9 @@ export default function App() {
   // Latest queue mirrored into a ref so the async parse effect can move
   // to the next entry on failure without a stale closure.
   const queueRef = useRef<QueueEntry[]>([]);
+  // Confirmed result of the entry just opened, waiting for its display
+  // so the stored picks can be snapped back onto it; null otherwise.
+  const restoreResultRef = useRef<AnalysisResult | null>(null);
   // Parsed waveform of the next pending entry, produced during idle time
   // so advancing is instant. Only one entry is ever cached.
   const prefetchRef = useRef<{ id: number; raw: RawWaveform } | null>(null);
@@ -281,6 +288,12 @@ export default function App() {
     goodDisplayRef.current = next;
     setChartDisplay(next);
     setDrtUs(estimateSampleIntervalUs(next.timeUs));
+    // A reopened confirmed file: show its previous picks on this display.
+    const restore = restoreResultRef.current;
+    if (restore) {
+      restoreResultRef.current = null;
+      setPicker(pickerStateFromResult(restore, next));
+    }
   }, [currentRaw, settings, trimError]);
 
   // Combine parse errors with the current trim error (if any) for display.
@@ -306,32 +319,38 @@ export default function App() {
     [effectiveErrors, lpfError],
   );
 
-  // Merged Results rows in chronological order: results from older
-  // batches (files no longer queued) sit at the TOP so history reads
-  // old-to-new downward, followed by the live batch in load order.
-  // Pending and current rows show blank value cells until confirmed.
-  const resultRows = useMemo<ResultRow[]>(() => {
-    // Index both sides once so joining results to queue rows stays O(N)
-    // instead of scanning the other list for every element.
-    const resultsByName = new Map<string, AnalysisResult>();
-    for (const r of results) resultsByName.set(r.fileName, r);
-    const queueNames = new Set(queue.map((e) => e.fileName));
-    const rows: ResultRow[] = [];
-    for (const r of results) {
-      // Results from older batches (file no longer queued) sit at the top.
-      if (!queueNames.has(r.fileName)) {
-        rows.push({ fileName: r.fileName, status: "confirmed", result: r });
-      }
+  // Every stored result for the CSV export: earlier batches first, then
+  // the live batch in load order (a redone file keeps its position).
+  const results = useMemo<AnalysisResult[]>(() => {
+    const list = [...history];
+    for (const e of queue) {
+      // Only files that were confirmed or canceled have a result.
+      if (e.result) list.push(e.result);
     }
+    return list;
+  }, [history, queue]);
+
+  // Results table rows: earlier batches on top (read-only, their files
+  // are gone), then the live batch in load order. Pending and current
+  // rows show blank value cells until they get a result.
+  const resultRows = useMemo<ResultRow[]>(() => {
+    const rows: ResultRow[] = history.map((r) => ({
+      entryId: null,
+      fileName: r.fileName,
+      status: isConfirmedResult(r) ? "confirmed" : "canceled",
+      result: r,
+    }));
     for (const e of queue) {
       rows.push({
+        // Invalid files cannot be parsed, so they cannot be reopened.
+        entryId: e.status === "invalid" ? null : e.id,
         fileName: e.fileName,
         status: e.status,
-        result: resultsByName.get(e.fileName) ?? null,
+        result: e.result,
       });
     }
     return rows;
-  }, [queue, results]);
+  }, [history, queue]);
 
   /**
    * Append a new notice to the in-app log. Mirrors the Python reference's
@@ -365,19 +384,20 @@ export default function App() {
    * in-flight parse for the same entry is a no-op.
    */
   const prefetchNext = useCallback(() => {
-    // Preview the same entry the queue will promote: the first pending
-    // one after the current row. Already-handled invalid rows are skipped.
+    // Preview the same entry Confirm/Cancel will open: the row right
+    // after the current one, skipping invalid rows.
     const currentIdx = queueRef.current.findIndex(
       (e) => e.status === "current",
     );
-    const next = queueRef.current.find(
-      (e, i) => i > currentIdx && e.status === "pending",
-    );
-    if (!next) return;
+    // No current row (batch finished): nothing will be opened next.
+    if (currentIdx === -1) return;
+    const nextIdx = nextOpenableIndex(queueRef.current, currentIdx);
+    if (nextIdx === -1) return;
+    const next = queueRef.current[nextIdx];
     // Already ready or already being read: nothing to do.
     if (prefetchRef.current?.id === next.id) return;
     if (prefetchingRef.current === next.id) return;
-    // A cache for a different entry is stale (skipped/canceled); drop it.
+    // A cache for a different entry is stale (user jumped elsewhere); drop it.
     prefetchRef.current = null;
     prefetchingRef.current = next.id;
     const gen = prefetchGenRef.current;
@@ -388,9 +408,9 @@ export default function App() {
           if (gen !== prefetchGenRef.current) return;
           const raw = parseWithSpec(text, next.fileName, next.spec);
           if (gen !== prefetchGenRef.current) return;
-          // Only cache while the entry is still waiting to be processed.
+          // Only cache while the entry is still queued and not opened yet.
           const still = queueRef.current.find((e) => e.id === next.id);
-          if (!still || still.status !== "pending") {
+          if (!still || still.status === "current") {
             return;
           }
           prefetchRef.current = { id: next.id, raw };
@@ -418,6 +438,45 @@ export default function App() {
     if (typeof ric === "function") ric(run, { timeout: 1000 });
     else window.setTimeout(run, 50);
   }, []);
+
+  /**
+   * Commit a queue whose previous current row is already settled and
+   * open the row at targetIdx (-1 opens nothing). Drops the old waveform
+   * and picks, queues a confirmed row's picks for restoring, and reports
+   * reaching the end of the list.
+   */
+  const openEntryAt = useCallback(
+    (settled: QueueEntry[], targetIdx: number) => {
+      const nextQueue = settled.slice();
+      // Valid target: promote it; its old result stays until redone.
+      if (targetIdx !== -1) {
+        nextQueue[targetIdx] = { ...nextQueue[targetIdx], status: "current" };
+      }
+      const target = targetIdx === -1 ? null : nextQueue[targetIdx];
+      // Only confirmed results carry picks worth restoring.
+      restoreResultRef.current =
+        target?.result && isConfirmedResult(target.result)
+          ? target.result
+          : null;
+      setQueue(nextQueue);
+      // Drop the previous file's arrays; the parse effect rebuilds the
+      // new current entry and logs "Now processing".
+      setCurrentRaw(null);
+      setPicker(emptyPickerState());
+      // Past the last row: tell the user whether anything was left behind.
+      if (targetIdx === -1) {
+        const pending = nextQueue.filter((e) => e.status === "pending").length;
+        addNotice(
+          "success",
+          pending === 0
+            ? "All files processed. You can download the results CSV."
+            : `Reached the end of the list; ${pending} file(s) are still ` +
+                "pending. Double-click a row to open one.",
+        );
+      }
+    },
+    [addNotice],
+  );
 
   // Parse the current entry on demand: adopt a prefetched waveform when
   // available, otherwise read its file and run the resolved mapping.
@@ -468,28 +527,13 @@ export default function App() {
             : x,
         );
         const failedIdx = marked.findIndex((x) => x.id === entry.id);
-        // Move forward to the next pending row; the invalid one stays put.
-        const nextIdx = marked.findIndex(
-          (x, i) => i > failedIdx && x.status === "pending",
-        );
-        if (nextIdx === -1) {
-          setQueue(marked);
-          addNotice(
-            "success",
-            "All files processed. You can download the results CSV.",
-          );
-          return;
-        }
-        const nextQueue = marked.slice();
-        nextQueue[nextIdx] = { ...nextQueue[nextIdx], status: "current" };
-        setQueue(nextQueue);
-        setPicker(emptyPickerState());
+        openEntryAt(marked, nextOpenableIndex(marked, failedIdx));
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [currentEntry, addNotice, prefetchNext]);
+  }, [currentEntry, addNotice, prefetchNext, openEntryAt]);
 
   // Explain discarded settings once at mount: the user should know why
   // their previous values did not survive an app update. Nothing stored
@@ -682,6 +726,7 @@ export default function App() {
         how,
         status: "pending",
         errorMessage: null,
+        result: null,
       };
     },
     [],
@@ -733,6 +778,13 @@ export default function App() {
     (entries: QueueEntry[]) => {
       if (entries.length === 0) return;
       const [first, ...rest] = entries;
+      // The outgoing batch's results move to history so they stay in the
+      // table and the CSV after its queue entries are replaced.
+      const archived = queueRef.current.flatMap((e) =>
+        e.result ? [e.result] : [],
+      );
+      if (archived.length > 0) setHistory((prev) => [...prev, ...archived]);
+      restoreResultRef.current = null;
       setQueue([
         { ...first, status: "current" },
         ...rest.map((e) => ({ ...e })),
@@ -797,45 +849,58 @@ export default function App() {
   }, [mappingMemo]);
 
   /**
-   * Advance the queue after Enter or Escape: mark the current entry as
-   * confirmed/canceled, then promote the first remaining pending entry
-   * to current. When no more entries remain, post an "All files
-   * processed" notice. The picker is reset for the next file.
+   * Store the Confirm/Cancel outcome on the current entry (replacing any
+   * earlier one, so a redone file keeps its row) and open the row right
+   * after it, whatever its status; invalid rows are passed over.
    */
   const advanceQueue = useCallback(
-    (lastStatus: "confirmed" | "canceled") => {
-      // Compute the new queue synchronously so the notice text can read
-      // the new current file's name without relying on setState callback
-      // return values to flow outside the callback.
+    (result: AnalysisResult, lastStatus: "confirmed" | "canceled") => {
       const currentIdx = queue.findIndex((e) => e.status === "current");
       if (currentIdx === -1) return;
-      let nextQueue = queue.map<QueueEntry>((e) =>
-        e.status === "current" ? { ...e, status: lastStatus } : e,
+      const settled = queue.map((e, i) =>
+        i === currentIdx ? { ...e, status: lastStatus, result } : e,
       );
-      // Promote the first pending row after the finished one; invalid
-      // rows left behind are terminal and must not be revisited.
-      const nextIdx = nextQueue.findIndex(
-        (e, i) => i > currentIdx && e.status === "pending",
-      );
-      if (nextIdx !== -1) {
-        nextQueue = nextQueue.slice();
-        nextQueue[nextIdx] = { ...nextQueue[nextIdx], status: "current" };
-      }
-      setQueue(nextQueue);
-      // Drop the finished file's arrays; the parse effect rebuilds the
-      // next current entry and logs "Now processing".
-      setCurrentRaw(null);
-      // Reset picker for the next file.
-      setPicker(emptyPickerState());
-      if (nextIdx === -1) {
-        addNotice(
-          "success",
-          "All files processed. You can download the results CSV.",
-        );
-      }
+      openEntryAt(settled, nextOpenableIndex(settled, currentIdx));
     },
-    [addNotice, queue],
+    [queue, openEntryAt],
   );
+
+  /**
+   * Open the entry with the given id from the results table or the Back
+   * button. The file being worked on goes back to its previous state
+   * (pending, or its stored result) and any unconfirmed picks are lost.
+   */
+  const openEntry = useCallback(
+    (id: number) => {
+      // Picks are frozen while the mapping dialog is open.
+      if (mappingRequest) return;
+      const targetIdx = queue.findIndex((e) => e.id === id);
+      // Unknown, unreadable, or already open: nothing to do.
+      if (targetIdx === -1) return;
+      const status = queue[targetIdx].status;
+      if (status === "invalid" || status === "current") return;
+      const settled = queue.map((e) =>
+        e.status === "current" ? { ...e, status: settledStatus(e) } : e,
+      );
+      openEntryAt(settled, targetIdx);
+    },
+    [queue, mappingRequest, openEntryAt],
+  );
+
+  // Row the Back button opens: the nearest openable row above the
+  // current one, or null at the top of the batch.
+  const backEntryId = useMemo(() => {
+    const currentIdx = queue.findIndex((e) => e.status === "current");
+    // No current row: Back is not shown anyway.
+    if (currentIdx === -1) return null;
+    const prevIdx = prevOpenableIndex(queue, currentIdx);
+    return prevIdx === -1 ? null : queue[prevIdx].id;
+  }, [queue]);
+
+  /** Back button: reopen the previous row (see openEntry). */
+  const handleBack = useCallback(() => {
+    if (backEntryId !== null) openEntry(backEntryId);
+  }, [backEntryId, openEntry]);
 
   /**
    * Handle user-selected or dropped files. Every file runs the generic
@@ -1218,33 +1283,6 @@ export default function App() {
   };
 
   /**
-   * Append a confirmed (Enter) or canceled (Escape) result to the results
-   * collection. The picker flags are set so pickerToAnalysisResult fills
-   * pick fields only when confirmed. The optional velocityConfig is
-   * forwarded so the stored row also carries STS/PTP velocities when
-   * wave velocity calculation is enabled.
-   */
-  const recordResult = useCallback(
-    (
-      pickerSnapshot: PickerState,
-      confirmed: boolean,
-      velocityConfig?: VelocityConfig,
-    ) => {
-      if (!currentRaw) return;
-      const stateForResult: PickerState = confirmed
-        ? { ...pickerSnapshot, isConfirmed: true, isCanceled: false }
-        : { ...pickerSnapshot, isConfirmed: false, isCanceled: true };
-      const result = pickerToAnalysisResult(
-        stateForResult,
-        currentRaw.fileName,
-        velocityConfig,
-      );
-      setResults((prev) => [...prev, result]);
-    },
-    [currentRaw],
-  );
-
-  /**
    * Trigger the all-results CSV save. Prefers the native Save As
    * dialog (no "Allow this site" prompt: the user is just choosing a
    * file) so the user can pick a folder and filename at save time.
@@ -1350,11 +1388,9 @@ export default function App() {
   );
 
   /**
-   * Shared Next/Enter action. Confirms only when all four picks are
-   * placed (mirroring the original Enter behavior: prevOverlay freeze,
-   * optional auto-PNG, queue advance). Skipping moved to its own
-   * Skip button so Next stays a strict confirm. Velocity guard wins
-   * so an undefined velocity never advances.
+   * Confirm & Next / Enter. Confirms only when all four picks are
+   * placed (prevOverlay freeze, optional auto-PNG, then open the next
+   * row). Velocity guard wins so an undefined velocity never advances.
    */
   const handleAdvance = useCallback(() => {
     if (!currentRaw) return;
@@ -1395,7 +1431,6 @@ export default function App() {
         return;
       }
     }
-    recordResult(picker, true, velocityConfig);
     // Freeze the just-confirmed display and its picks as the
     // reference overlay for the following files; skip never touches this.
     const {
@@ -1428,7 +1463,7 @@ export default function App() {
     if (autoDownloadPng) {
       capturePng("auto");
     }
-    advanceQueue("confirmed");
+    advanceQueue(result, "confirmed");
   }, [
     currentRaw,
     picker,
@@ -1436,22 +1471,25 @@ export default function App() {
     settings.distanceMm,
     settings.systemDelayUs,
     autoDownloadPng,
-    recordResult,
     advanceQueue,
     addNotice,
     capturePng,
   ]);
 
   /**
-   * Skip the current file unconditionally (no picks recorded). Always
-   * available while a file is loaded; picks need not be complete.
+   * Cancel & Next / Escape: store an empty canceled result for the
+   * current file (dropping any earlier confirmed values) and open the
+   * next row. Always available while a file is loaded.
    */
-  const handleSkip = useCallback(() => {
+  const handleCancel = useCallback(() => {
     if (!currentRaw) return;
-    recordResult(picker, false);
-    addNotice("cancel", `Analysis skipped for ${currentRaw.fileName}.`);
-    advanceQueue("canceled");
-  }, [currentRaw, picker, recordResult, advanceQueue, addNotice]);
+    const result = pickerToAnalysisResult(
+      { ...picker, isConfirmed: false, isCanceled: true },
+      currentRaw.fileName,
+    );
+    addNotice("cancel", `Analysis canceled for ${currentRaw.fileName}.`);
+    advanceQueue(result, "canceled");
+  }, [currentRaw, picker, advanceQueue, addNotice]);
 
   /**
    * Step the chart x-zoom in by one ZOOM_PERCENTAGES tick. Clamped at
@@ -1479,7 +1517,8 @@ export default function App() {
     addNotice("info", `Zoom: ${Math.round(ZOOM_PERCENTAGES[next] * 100)}%`);
   }, [settings.zoomIndex, addNotice]);
 
-  // Global keyboard handler: Enter mirrors Next, Escape mirrors Skip.
+  // Global keyboard handler: Enter mirrors Confirm & Next, Escape
+  // mirrors Cancel & Next.
   // Z stays dropped in favor of the dedicated Zoom +/− buttons.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1495,14 +1534,14 @@ export default function App() {
         handleAdvance();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        handleSkip();
+        handleCancel();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [
     handleAdvance,
-    handleSkip,
+    handleCancel,
     mappingRequest,
   ]);
 
@@ -1647,10 +1686,12 @@ export default function App() {
           {currentRaw ? (
             <PickGuidanceBar
               mappingOpen={mappingRequest != null}
+              canGoBack={backEntryId !== null}
               canZoomIn={settings.zoomIndex < ZOOM_PERCENTAGES.length - 1}
               canZoomOut={settings.zoomIndex > 0}
+              onBack={handleBack}
               onAdvance={handleAdvance}
-              onSkip={handleSkip}
+              onCancel={handleCancel}
               onZoomIn={handleZoomIn}
               onZoomOut={handleZoomOut}
             />
@@ -1681,7 +1722,9 @@ export default function App() {
               </div>
             )}
           </div>
-          {!resultsHidden && <ResultsTable rows={resultRows} />}
+          {!resultsHidden && (
+            <ResultsTable rows={resultRows} onOpenEntry={openEntry} />
+          )}
         </section>
       </main>
       {/* Full-window drop hint shown while files hover over the page.
@@ -1718,25 +1761,30 @@ export default function App() {
  * furniture never bleeds across the chart boundary.
  *
  * Action flow:
- *  - Next: strict confirm only; mirrors the Enter key.
- *  - Skip: skip the current file without recording; mirrors Escape.
+ *  - Back: reopen the previous row.
+ *  - Confirm & Next: strict confirm only; mirrors the Enter key.
+ *  - Cancel & Next: store the file as canceled; mirrors Escape.
  *  - Zoom +/-: step the chart x-zoom in fixed ticks.
  */
 function PickGuidanceBar(props: {
   mappingOpen: boolean;
+  canGoBack: boolean;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  onBack: () => void;
   onAdvance: () => void;
-  onSkip: () => void;
+  onCancel: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
 }) {
   const {
     mappingOpen,
+    canGoBack,
     canZoomIn,
     canZoomOut,
+    onBack,
     onAdvance,
-    onSkip,
+    onCancel,
     onZoomIn,
     onZoomOut,
   } = props;
@@ -1751,28 +1799,36 @@ function PickGuidanceBar(props: {
         </p>
       </div>
       <div className="pick-actions">
-        {/* Next: primary call-to-action with stacked label + Enter hint. */}
+        <button
+          type="button"
+          className="pick-action-button"
+          onClick={onBack}
+          disabled={!canGoBack || mappingOpen}
+          title="Reopen the previous file; unconfirmed picks are discarded"
+        >
+          ◀ Back
+        </button>
+        {/* Confirm: primary call-to-action with stacked label + Enter hint. */}
         <button
           type="button"
           className="pick-action-button pick-action-button-primary pick-action-button-stacked"
           onClick={onAdvance}
           disabled={mappingOpen}
-          title="Confirm and advance to the next file (requires all four picks)"
+          title="Confirm the picks and open the next file (requires all four picks)"
         >
-          <span className="pick-action-button-label">▶ Next</span>
+          <span className="pick-action-button-label">✓ Confirm &amp; Next</span>
           <span className="pick-action-button-sub">
             or press <kbd className="kbd-inline">Enter</kbd>
           </span>
         </button>
-        {/* Skip: always live, takes the whole second grid cell. */}
         <button
           type="button"
-          className="pick-action-button pick-action-button-skip pick-action-button-stacked"
-          onClick={onSkip}
+          className="pick-action-button pick-action-button-cancel pick-action-button-stacked"
+          onClick={onCancel}
           disabled={mappingOpen}
-          title="Skip the current file without recording picks (Esc)"
+          title="Mark the file as canceled (no values) and open the next file"
         >
-          <span className="pick-action-button-label">→ Skip</span>
+          <span className="pick-action-button-label">✕ Cancel &amp; Next</span>
           <span className="pick-action-button-sub">
             or press <kbd className="kbd-inline">Esc</kbd>
           </span>
@@ -1801,6 +1857,39 @@ function PickGuidanceBar(props: {
   );
 }
 
+
+/**
+ * Index of the first row after `from` that can be opened (any status
+ * but invalid), or -1 when none is left.
+ */
+function nextOpenableIndex(queue: QueueEntry[], from: number): number {
+  for (let i = from + 1; i < queue.length; i++) {
+    // Invalid files cannot be parsed, so they are passed over.
+    if (queue[i].status !== "invalid") return i;
+  }
+  return -1;
+}
+
+/**
+ * Index of the nearest row before `from` that can be opened, or -1
+ * at the top of the batch.
+ */
+function prevOpenableIndex(queue: QueueEntry[], from: number): number {
+  for (let i = from - 1; i >= 0; i--) {
+    // Invalid files cannot be parsed, so they are passed over.
+    if (queue[i].status !== "invalid") return i;
+  }
+  return -1;
+}
+
+/**
+ * Status a row returns to when it stops being current without a new
+ * Confirm/Cancel: its stored result decides, otherwise pending.
+ */
+function settledStatus(entry: QueueEntry): QueueEntry["status"] {
+  if (!entry.result) return "pending";
+  return isConfirmedResult(entry.result) ? "confirmed" : "canceled";
+}
 
 /**
  * Build the success message shown in the notice log when Enter confirms
@@ -1838,7 +1927,7 @@ function buildConfirmMessage(
  * or otherwise editing text. Used to skip Enter / Escape / Z shortcuts
  * so they never interfere with normal form input. Caret-less inputs
  * such as the toggle checkboxes are excluded: they never use Enter or
- * Escape, so a just-clicked toggle must not swallow Next/Skip.
+ * Escape, so a just-clicked toggle must not swallow Confirm/Cancel.
  */
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
