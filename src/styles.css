@@ -728,11 +728,12 @@ body,
 .pick-actions {
   /* The text panel now eats ~480px, so the action row gets whatever
      the chart area has left. Single row of 5 cells (Back / Confirm
-     / Cancel / Zoom+ / Zoom-); Back and Zoom stay narrow. */
+     / Cancel / Zoom+ / Zoom-); Confirm gets the widest cell so it
+     reads as the main action, Back and Zoom stay narrow. */
   flex: 1 1 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: 0.7fr 1.4fr 1.4fr 0.7fr 0.7fr;
+  grid-template-columns: 0.6fr 1.8fr 1.1fr 0.6fr 0.6fr;
   gap: 4px;
   align-items: stretch;
 }
@@ -853,12 +854,13 @@ body,
   transform: translateX(16px);
 }
 
-/* Cancel & Next: an advance action like Confirm, so it shares the
-   accent fill; the disabled base style still applies while the
-   mapping dialog is open. */
+/* Cancel & Next: an advance action like Confirm, so it uses a lighter
+   shade of the accent to stay secondary (white text keeps ~3.6:1
+   contrast); the disabled base style still applies while the mapping
+   dialog is open. */
 .pick-action-button-cancel {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: #4a8cc4;
+  border-color: #4a8cc4;
   color: #fff;
 }
 .pick-action-button-cancel:hover:not(:disabled) {
