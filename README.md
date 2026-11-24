@@ -40,13 +40,13 @@ Chromium 系のブラウザ (**Chrome**, **Edge**, **Opera**) で、フル HD (1
 | Dual trace view | Trigger (transmitter) and Receiver traces on a shared microsecond time axis. |
 | Display settings | Amplitude gain, offset correction, time trimming, zoom with per-chart pan scrollbars. |
 | Low pass filter | Zero-phase Butterworth low-pass filter on the Receiver trace with adjustable cutoff (kHz). |
-| Batch queue | Load multiple CSVs and determine wave travel time in sequence. |
+| Batch queue | Load multiple CSVs and determine wave travel time in sequence with Confirm & Next / Cancel & Next; Back or a double-click on a results row reopens a file to redo it. |
 | Manual picking | Left click sets the Start point (Peak auto-derived); right click overrides the Peak. |
 | Trigger auto-detection | Threshold-based automatic Trigger Start pick with derived Peak. |
 | CC receiver picking | Receiver Start estimated by cross-correlating against the last confirmed file inside a Before/After window; Peak derived from it. |
 | Previous-waveform overlay | Faded reference traces, dashed pick guides, and Δ annotations versus the live picks. |
 | Wave velocity | Propagation times with system-delay correction and distance-based wave velocity. |
-| Results & export | Per-file results table, results CSV download, PNG chart export with auto-save on confirm. |
+| Results & export | Results table listing every loaded file with the current one highlighted, results CSV download, PNG chart export with auto-save on confirm. |
 | Offline & installable | Service-worker precache for fully offline use; installable as a standalone app with an in-app Reload prompt on updates. |
 
 | 機能 | 説明 |
@@ -56,13 +56,13 @@ Chromium 系のブラウザ (**Chrome**, **Edge**, **Opera**) で、フル HD (1
 | 2 波形同時表示 | Trigger (送信側) と Receiver (受信側) の波形を共通のマイクロ秒軸に表示。 |
 | 表示設定 | 振幅ゲイン、オフセット補正、時間トリミング、チャートごとのズームとパン用スクロールバー。 |
 | ローパスフィルタ | 受信波形へのゼロ位相 Butterworth ローパスフィルタ。カットオフ周波数 (kHz) は調整可能。 |
-| バッチキュー | 複数の CSV を読み込み、波形到達時間を順番に決定。 |
+| バッチキュー | 複数の CSV を読み込み、Confirm & Next / Cancel & Next で波形到達時間を順番に決定。Back または結果表の行のダブルクリックで、ファイルを開き直してやり直し可能。 |
 | 手動ピッキング | 左クリックで立ち上がり点を設定 (ピークは自動算出)。右クリックでピークを上書き。 |
 | Trigger 自動検出 | 閾値ベースの Trigger 立ち上がり自動検出。ピークはそこから算出。 |
 | CC による Receiver 検出 | 直前に確認したファイルとの相互相関により、Before/After ウィンドウ内で Receiver の立ち上がりを推定。ピークはそこから算出。 |
 | 前回波形のオーバーレイ | 半透明の参照波形、破線のピッキングガイド、現在値との Δ 注記を表示。 |
 | 弾性波速度 | システム遅延補正付きの到達時間から、距離ベースの弾性波速度を算出。 |
-| 結果とエクスポート | ファイル単位の結果表、結果 CSV のダウンロード、PNG チャート出力 (確認時の自動保存)。 |
+| 結果とエクスポート | 読み込んだ全ファイルを並べ、現在のファイルを強調表示する結果表、結果 CSV のダウンロード、PNG チャート出力 (確認時の自動保存)。 |
 | オフラインとインストール | Service Worker の precache により完全オフラインで動作。スタンドアロンアプリとしてインストール可能で、更新時はアプリ内 Reload 通知。 |
 
 ## Output CSV columns
