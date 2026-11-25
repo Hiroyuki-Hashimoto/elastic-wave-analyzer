@@ -51,6 +51,7 @@ import {
 import {
   buildDisplayWaveform,
   validateTrim,
+  type DisplayTransformSettings,
 } from "./lib/waveform";
 import {
   DEFAULT_DISPLAY_SETTINGS,
@@ -254,7 +255,43 @@ export default function App() {
   // queue is discarded instead of caching a stale waveform.
   const prefetchGenRef = useRef(0);
 
-  const trimError = useMemo(() => validateTrim(settings), [settings]);
+  // Display-shaping subset of the settings, rebuilt only when one of its
+  // fields changes, so zoom or velocity edits leave chartDisplay (and the
+  // auto pickers keyed on it) untouched.
+  const {
+    amplitudeGain,
+    offsetEnabled,
+    trimEnabled,
+    trimStartUs,
+    trimEndUs,
+    lpfEnabled,
+    lpfCutoffKHz,
+  } = settings;
+  const displayTransform = useMemo<DisplayTransformSettings>(
+    () => ({
+      amplitudeGain,
+      offsetEnabled,
+      trimEnabled,
+      trimStartUs,
+      trimEndUs,
+      lpfEnabled,
+      lpfCutoffKHz,
+    }),
+    [
+      amplitudeGain,
+      offsetEnabled,
+      trimEnabled,
+      trimStartUs,
+      trimEndUs,
+      lpfEnabled,
+      lpfCutoffKHz,
+    ],
+  );
+
+  const trimError = useMemo(
+    () => validateTrim(displayTransform),
+    [displayTransform],
+  );
 
   // Keep the last GOOD display around so an invalid trim range surfaces an
   // English error but never destroys an already-rendered chart (per spec).
@@ -271,7 +308,8 @@ export default function App() {
   // guides and Δ labels). Cleared when a fresh batch of files loads.
   const [prevOverlay, setPrevOverlay] = useState<PrevOverlay | null>(null);
 
-  // Re-derive the display waveform whenever the current file or settings change.
+  // Re-derive the display waveform when the current file or a
+  // display-shaping setting changes (not on zoom or other settings).
   useEffect(() => {
     // No file loaded: clear any cached good display and hide the chart.
     if (!currentRaw) {
@@ -284,7 +322,7 @@ export default function App() {
     if (trimError) {
       return;
     }
-    const next = buildDisplayWaveform(currentRaw, settings);
+    const next = buildDisplayWaveform(currentRaw, displayTransform);
     goodDisplayRef.current = next;
     setChartDisplay(next);
     setDrtUs(estimateSampleIntervalUs(next.timeUs));
@@ -294,7 +332,7 @@ export default function App() {
       restoreResultRef.current = null;
       setPicker(pickerStateFromResult(restore, next));
     }
-  }, [currentRaw, settings, trimError]);
+  }, [currentRaw, displayTransform, trimError]);
 
   // Combine parse errors with the current trim error (if any) for display.
   const effectiveErrors = useMemo(() => {

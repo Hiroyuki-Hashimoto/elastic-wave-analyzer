@@ -5,6 +5,22 @@ import type {
 } from "../types";
 import { applyReceiverLpf, estimateSamplingRateHz } from "./lpf";
 
+/**
+ * The only settings that change the displayed samples. Callers key the
+ * display rebuild on these so unrelated settings (zoom, velocity, ...)
+ * keep the same display object and do not re-run the auto pickers.
+ */
+export type DisplayTransformSettings = Pick<
+  DisplaySettings,
+  | "amplitudeGain"
+  | "offsetEnabled"
+  | "trimEnabled"
+  | "trimStartUs"
+  | "trimEndUs"
+  | "lpfEnabled"
+  | "lpfCutoffKHz"
+>;
+
 export const RAW_WAVEFORM_ERRORS = {
   few: "At least two data points are required.",
   monotonic: "The time column must be strictly increasing.",
@@ -96,7 +112,7 @@ export function resampleOnto(
  */
 export function buildDisplayWaveform(
   raw: RawWaveform,
-  settings: DisplaySettings,
+  settings: DisplayTransformSettings,
 ): DisplayWaveform {
   const n = raw.timeUs.length;
   const txRaw = raw.transmitterVRaw;
@@ -160,7 +176,9 @@ export function buildDisplayWaveform(
  * when trim is disabled). Callers use this to decide whether to
  * re-render the chart without destroying the existing one.
  */
-export function validateTrim(settings: DisplaySettings): string | null {
+export function validateTrim(
+  settings: DisplayTransformSettings,
+): string | null {
   if (settings.trimEnabled && settings.trimStartUs >= settings.trimEndUs) {
     return "Trim start must be earlier than trim end (µs).";
   }
